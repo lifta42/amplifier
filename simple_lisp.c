@@ -9,9 +9,13 @@
 #define MAX_NAME_LEN 32
 #define ENV_INIT_SIZE 8
 #define LIST_MAX_SIZE 32
-#define MAX_SRC_LEN 1024
+#define SRC_INIT_LEN 1024
 
-// data structure part
+#define DISPLAY_LIST_MAX_ITEM 3
+
+// Part 1: data structure
+// notice: store primitive types in place, refer `struct X`  and strings with
+// pointer
 enum ElementType {
   TYPE_INT,
   TYPE_BOOL,
@@ -39,26 +43,26 @@ struct Element {
   union {
     int int_value;
     int bool_value;
-    char name_value[MAX_NAME_LEN];
+    char *name_value;
     struct ElementList *list_value;
     Builtin builtin_value;
     struct Lambda *lambda_value;
   } value;
+  // line number and col position help a lot... maybe next level
 };
 
 struct ElementList {
-  struct Element *elements;
-  int size;
+  struct Element **elements;
   int length;
 };
 
 struct EnvPair {
-  char name[MAX_NAME_LEN];
+  char *name;
   struct Element *value;
 };
 
 struct Env {
-  struct EnvPair *values;
+  struct EnvPair **values;
   int size;
   int length;
   struct Env *parent;
@@ -67,7 +71,7 @@ struct Env {
 struct Env *create_env(struct Env *parent) {
   struct Env *env = malloc(sizeof(struct Env));
   env->parent = parent;
-  env->values = malloc(sizeof(struct EnvPair) * ENV_INIT_SIZE);
+  env->values = malloc(sizeof(struct EnvPair *) * ENV_INIT_SIZE);
   env->size = ENV_INIT_SIZE;
   env->length = 0;
   return env;
@@ -75,8 +79,8 @@ struct Env *create_env(struct Env *parent) {
 
 struct Element *resolve(char *name, struct Env *env) {
   for (int i = 0; i < env->length; i++) {
-    if (strcmp(name, env->values[i].name) == 0) {
-      return env->values[i].value;
+    if (strcmp(name, env->values[i]->name) == 0) {
+      return env->values[i]->value;
     }
   }
   if (env->parent == NULL) {
@@ -89,42 +93,48 @@ struct Element *resolve(char *name, struct Env *env) {
 
 void register_(struct Env *env, char *name, struct Element *value) {
   for (int i = 0; i < env->length; i++) {
-    if (strcmp(name, env->values[i].name) == 0) {
-      env->values[i].value = value;
+    if (strcmp(name, env->values[i]->name) == 0) {
+      env->values[i]->value = value;
       return;
     }
   }
   if (env->length == env->size) {
-    env->values = realloc(env->values, sizeof(struct EnvPair) * env->size * 2);
+    env->values =
+        realloc(env->values, sizeof(struct EnvPair *) * env->size * 2);
     env->size *= 2;
   }
-  strcpy(env->values[env->length].name, name);
-  env->values[env->length].value = value;
+  env->values[env->length] = malloc(sizeof(struct EnvPair));
+  env->values[env->length]->name = name;
+  env->values[env->length]->value = value;
   env->length++;
 }
 
-// work loop part
+// Part 2: interpret loop
+// notice: only modify `Env`s, only create others and refer to existing items
 struct Element *apply(struct Element *ele, struct Element **args, int arg_count,
                       struct Env *parent);
 
+// `lambda`, `cond` and `define` accepts un-evaluated elements as arguments, so
+// they are not able to be built-ins, only compiler plugins (macros).
 struct Element *eval_lambda(struct Element *lambda, struct Env *parent) {
+  assert(lambda->value.list_value->length >= 2);
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_LAMBDA;
   ele->value.lambda_value = malloc(sizeof(struct Lambda));
   ele->value.lambda_value->parent = parent;
-  struct Element *arg_list = &lambda->value.list_value->elements[1];
+  struct Element *arg_list = lambda->value.list_value->elements[1];
   assert(arg_list->type == TYPE_LIST);
   ele->value.lambda_value->arg_count = arg_list->value.list_value->length;
   for (int i = 0; i < ele->value.lambda_value->arg_count; i++) {
-    assert(arg_list->value.list_value->elements[i].type == TYPE_NAME);
+    assert(arg_list->value.list_value->elements[i]->type == TYPE_NAME);
     ele->value.lambda_value->args[i] =
-        arg_list->value.list_value->elements[i].value.name_value;
+        arg_list->value.list_value->elements[i]->value.name_value;
   }
   ele->value.lambda_value->body = malloc(sizeof(struct ElementList));
   int body_length = lambda->value.list_value->length - 2;
   ele->value.lambda_value->body->length = body_length;
   ele->value.lambda_value->body->elements =
-      malloc(sizeof(struct Element) * body_length);
+      malloc(sizeof(struct Element *) * body_length);
   for (int i = 0; i < body_length; i++) {
     ele->value.lambda_value->body->elements[i] =
         lambda->value.list_value->elements[i + 2];
@@ -135,19 +145,20 @@ struct Element *eval_lambda(struct Element *lambda, struct Env *parent) {
 struct Element *eval(struct Element *ele, struct Env *env);
 
 struct Element *eval_cond(struct Element *cond, struct Env *parent) {
+  assert(cond->value.list_value->length >= 2);
   for (int i = 1; i < cond->value.list_value->length; i++) {
-    struct Element *branch = &cond->value.list_value->elements[i];
+    struct Element *branch = cond->value.list_value->elements[i];
     assert(branch->type == TYPE_LIST);
     assert(branch->value.list_value->length == 2);
-    struct Element *branch_cond = &branch->value.list_value->elements[0];
+    struct Element *branch_cond = branch->value.list_value->elements[0];
     if (branch_cond->type == TYPE_NAME &&
         strcmp(branch_cond->value.name_value, "else") == 0) {
-      return eval(&branch->value.list_value->elements[1], parent);
+      return eval(branch->value.list_value->elements[1], parent);
     }
     struct Element *condition = eval(branch_cond, parent);
     assert(condition->type == TYPE_BOOL);
     if (condition->value.bool_value) {
-      return eval(&branch->value.list_value->elements[1], parent);
+      return eval(branch->value.list_value->elements[1], parent);
     }
   }
   struct Element *ele = malloc(sizeof(struct Element));
@@ -157,10 +168,11 @@ struct Element *eval_cond(struct Element *cond, struct Env *parent) {
 
 struct Element *eval_define(struct Element *def, struct Env *parent) {
   assert(def->value.list_value->length == 3);
-  struct Element *name = &def->value.list_value->elements[1];
+  struct Element *name = def->value.list_value->elements[1];
+  // dynamic name is not allowed
   assert(name->type == TYPE_NAME);
   register_(parent, name->value.name_value,
-            eval(&def->value.list_value->elements[2], parent));
+            eval(def->value.list_value->elements[2], parent));
 
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_NULL;
@@ -178,7 +190,7 @@ struct Element *eval(struct Element *ele, struct Env *env) {
   case TYPE_NAME:
     return resolve(ele->value.name_value, env);
   case TYPE_LIST: {
-    struct Element *callable = &ele->value.list_value->elements[0];
+    struct Element *callable = ele->value.list_value->elements[0];
     if (callable->type == TYPE_NAME) {
       if (strcmp(callable->value.name_value, "lambda") == 0) {
         return eval_lambda(ele, env);
@@ -190,6 +202,7 @@ struct Element *eval(struct Element *ele, struct Env *env) {
         callable = resolve(callable->value.name_value, env);
       }
     }
+    // IIFE style lambda
     if (callable->type == TYPE_LIST) {
       callable = eval(callable, env);
     }
@@ -197,7 +210,7 @@ struct Element *eval(struct Element *ele, struct Env *env) {
     // strict order
     struct Element **args = malloc(sizeof(struct Element *) * arg_count);
     for (int i = 0; i < arg_count; i++) {
-      args[i] = eval(&ele->value.list_value->elements[i + 1], env);
+      args[i] = eval(ele->value.list_value->elements[i + 1], env);
     }
     return apply(callable, args, arg_count, env);
   }
@@ -223,13 +236,14 @@ struct Element *apply(struct Element *ele, struct Element **args, int arg_count,
     struct Element *result = malloc(sizeof(struct Element));
     result->type = TYPE_NULL; // fallback for (lambda (...) )
     for (int i = 0; i < ele->value.lambda_value->body->length; i++) {
-      result = eval(&ele->value.lambda_value->body->elements[i], env);
+      result = eval(ele->value.lambda_value->body->elements[i], env);
     }
     return result;
   }
 }
 
-// parser part
+// Part 3: parser
+// notice: create everything here
 struct Element *parse(char *source, int *pos) {
   while (isspace(source[*pos])) {
     (*pos)++;
@@ -261,7 +275,7 @@ struct Element *parse(char *source, int *pos) {
       ele->value.int_value = n;
       return ele;
     } else {
-      char name[MAX_NAME_LEN];
+      char *name = malloc(sizeof(char) * MAX_NAME_LEN);
       int name_len = 0;
       while (!isspace(source[*pos]) && source[*pos] != ')') {
         name[name_len] = source[*pos];
@@ -269,6 +283,7 @@ struct Element *parse(char *source, int *pos) {
         (*pos)++;
       }
       name[name_len] = '\0';
+      // alternative way is to define a built-in, but I do not like `(nil)`
       if (strcmp(name, "nil") == 0) {
         struct Element *ele = malloc(sizeof(struct Element));
         ele->type = TYPE_NULL;
@@ -276,7 +291,7 @@ struct Element *parse(char *source, int *pos) {
       } else {
         struct Element *ele = malloc(sizeof(struct Element));
         ele->type = TYPE_NAME;
-        strcpy(ele->value.name_value, name);
+        ele->value.name_value = name;
         return ele;
       }
     }
@@ -298,19 +313,18 @@ struct Element *parse(char *source, int *pos) {
         (*pos)++;
       }
     }
-    (*pos)++;
-    ele->value.list_value->length = ele->value.list_value->size = child_count;
+    (*pos)++; // for ')'
+    ele->value.list_value->length = child_count;
     ele->value.list_value->elements =
-        malloc(sizeof(struct Element) * child_count);
+        malloc(sizeof(struct Element *) * child_count);
     for (int i = 0; i < child_count; i++) {
-      memcpy(&ele->value.list_value->elements[i], child_list[i],
-             sizeof(struct Element));
+      ele->value.list_value->elements[i] = child_list[i];
     }
     return ele;
   }
 }
 
-// built-in part
+// Part 4: built-in
 struct Element *builtin_add(struct Element **args, int arg_count,
                             struct Env *parent) {
   assert(arg_count == 2);
@@ -325,10 +339,54 @@ struct Element *builtin_add(struct Element **args, int arg_count,
 struct Element *builtin_display(struct Element **args, int arg_count,
                                 struct Env *parent) {
   assert(arg_count == 1);
-  if (args[0]->type == TYPE_INT) {
+  switch (args[0]->type) {
+  case TYPE_INT:
     printf("%d", args[0]->value.int_value);
-  } else if (args[0]->type == TYPE_BOOL) {
+    break;
+  case TYPE_BOOL:
     printf(args[0]->value.bool_value ? "true" : "false");
+    break;
+  case TYPE_NULL:
+    printf("nil");
+    break;
+  case TYPE_NAME:
+    printf("<name: %s>", args[0]->value.name_value);
+    break;
+  case TYPE_BUILTIN:
+    printf("<built-in %p>", args[0]->value.builtin_value);
+    break;
+  case TYPE_LAMBDA:
+    printf("<lambda (");
+    char *prefix = "";
+    for (int i = 0; i < args[0]->value.lambda_value->arg_count; i++) {
+      printf("%s%s", prefix, args[0]->value.lambda_value->args[i]);
+      prefix = " ";
+    }
+    printf(")>");
+    break;
+  case TYPE_LIST: {
+    int len = args[0]->value.list_value->length > DISPLAY_LIST_MAX_ITEM
+                  ? DISPLAY_LIST_MAX_ITEM
+                  : args[0]->value.list_value->length;
+    printf("(");
+    char *prefix = "";
+    for (int i = 0; i < len; i++) {
+      printf("%s", prefix);
+      prefix = " ";
+      struct Element *ele = args[0]->value.list_value->elements[i];
+      if (ele->type == TYPE_LIST) {
+        printf("(...)");
+      } else {
+        // a bad re-use example, just because of laziness
+        builtin_display(&ele, 1, parent);
+      }
+    }
+    if (len < args[0]->value.list_value->length) {
+      printf("%s...", prefix);
+    }
+    printf(")");
+    break;
+  }
   }
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_NULL;
@@ -379,8 +437,10 @@ struct Element *builtin_sub(struct Element **args, int arg_count,
   return ele;
 }
 
+// this is inevitable because there's no `string` or `char` type
 struct Element *builtin_newline(struct Element **args, int arg_count,
                                 struct Env *parent) {
+  assert(arg_count == 0);
   printf("\n");
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_NULL;
@@ -389,6 +449,7 @@ struct Element *builtin_newline(struct Element **args, int arg_count,
 
 struct Element *builtin_is_nil(struct Element **args, int arg_count,
                                struct Env *parent) {
+  assert(arg_count == 1);
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BOOL;
   ele->value.bool_value = args[0]->type == TYPE_NULL;
@@ -397,7 +458,7 @@ struct Element *builtin_is_nil(struct Element **args, int arg_count,
 
 struct Element *builtin_exit(struct Element **args, int arg_count,
                              struct Env *parent) {
-  if (arg_count == 0 || args[0]->type == TYPE_NULL) {
+  if (arg_count == 0) {
     exit(0);
   }
   assert(args[0]->type == TYPE_INT);
@@ -415,7 +476,7 @@ void register_builtin(struct Env *env, char *name, Builtin builtin) {
   register_(env, name, ele);
 }
 
-// driver part
+// Part 5: driver
 int main() {
   struct Env *env = create_env(NULL);
   register_builtin(env, "+", builtin_add);
@@ -428,9 +489,10 @@ int main() {
   register_builtin(env, "nil?", builtin_is_nil);
   register_builtin(env, "exit", builtin_exit);
 
-  char *source = malloc(sizeof(char) * MAX_SRC_LEN);
+  char *source = malloc(sizeof(char) * SRC_INIT_LEN);
   source[0] = '\0';
   int len = 0;
+  // read whole `stdin` into `source`
   while (1) {
     char *line = NULL;
     int line_len = 0;
@@ -445,7 +507,6 @@ int main() {
 
   int pos = 0;
   while (pos != len) {
-    struct Element *ele = parse(source, &pos);
-    eval(ele, env);
+    eval(parse(source, &pos), env);
   }
 }
