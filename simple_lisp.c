@@ -460,42 +460,23 @@ struct Element *builtin_exit(struct Element **args, int arg_count,
 #define FOLDR_INIT_REGISTERED_NAME "reserved_foldr-init"
 struct Element *builtin_foldr_impl(struct Element **, int, struct Env *);
 // (foldr callback init) ==>
-// ( (lambda () <built-in (args...) ...>) )
+// <env <built-in (args...) ...> >
 struct Element *builtin_foldr(struct Element **args, int arg_count,
                               struct Env *parent) {
   assert(arg_count == 2);
   struct Element *callback = args[0], *init = args[1];
   assert(callback->type == TYPE_LAMBDA || callback->type == TYPE_BUILTIN);
 
-  struct Env *outer_env = create_env(parent);
-  register_(outer_env, FOLDR_CALLBACK_REGISTERED_NAME, callback);
-  register_(outer_env, FOLDR_INIT_REGISTERED_NAME, init);
-
-  struct Element *inner = malloc(sizeof(struct Element));
-  inner->type = TYPE_BUILTIN;
-  inner->value.builtin_value = malloc(sizeof(struct Builtin));
-  inner->value.builtin_value->func = builtin_foldr_impl;
-  inner->value.builtin_value->parent = outer_env;
-
-  struct Element *outer = malloc(sizeof(struct Element));
-  outer->type = TYPE_LAMBDA;
-  outer->value.lambda_value = malloc(sizeof(struct Lambda));
-  outer->value.lambda_value->parent = outer_env;
-  outer->value.lambda_value->arg_count = 0;
-  outer->value.lambda_value->body = malloc(sizeof(struct ElementList));
-  outer->value.lambda_value->body->length = 1;
-  outer->value.lambda_value->body->elements =
-      malloc(sizeof(struct Element *) * 1);
-  outer->value.lambda_value->body->elements[0] = inner;
+  struct Env *env = create_env(parent);
+  register_(env, FOLDR_CALLBACK_REGISTERED_NAME, callback);
+  register_(env, FOLDR_INIT_REGISTERED_NAME, init);
 
   struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_LIST;
-  ele->value.list_value = malloc(sizeof(struct ElementList));
-  ele->value.list_value->length = 1;
-  ele->value.list_value->elements = malloc(sizeof(struct Element *) * 1);
-  ele->value.list_value->elements[0] = outer;
-
-  return eval(ele, parent);
+  ele->type = TYPE_BUILTIN;
+  ele->value.builtin_value = malloc(sizeof(struct Builtin));
+  ele->value.builtin_value->func = builtin_foldr_impl;
+  ele->value.builtin_value->parent = env;
+  return ele;
 }
 
 struct Element *builtin_foldr_impl(struct Element **args, int arg_count,
