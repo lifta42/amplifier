@@ -36,7 +36,12 @@ struct Lambda {
   struct ElementList *body;
 };
 
-typedef struct Element *(*Builtin)(struct Element **, int, struct Env *);
+typedef struct Element *(*BuiltinFunc)(struct Element **, int, struct Env *);
+
+struct Builtin {
+  BuiltinFunc func;
+  struct Env *parent;
+};
 
 struct Element {
   enum ElementType type;
@@ -45,7 +50,7 @@ struct Element {
     int bool_value;
     char *name_value;
     struct ElementList *list_value;
-    Builtin builtin_value;
+    struct Builtin *builtin_value;
     struct Lambda *lambda_value;
   } value;
   // line number and col position help a lot... maybe next level
@@ -78,17 +83,16 @@ struct Env *create_env(struct Env *parent) {
 }
 
 struct Element *resolve(char *name, struct Env *env) {
+  if (env == NULL) {
+    fprintf(stderr, "there is no var called %s\n", name);
+    exit(1);
+  }
   for (int i = 0; i < env->length; i++) {
     if (strcmp(name, env->values[i]->name) == 0) {
       return env->values[i]->value;
     }
   }
-  if (env->parent == NULL) {
-    fprintf(stderr, "there is no var called %s\n", name);
-    exit(1);
-  } else {
-    return resolve(name, env->parent);
-  }
+  return resolve(name, env->parent);
 }
 
 void register_(struct Env *env, char *name, struct Element *value) {
@@ -111,8 +115,8 @@ void register_(struct Env *env, char *name, struct Element *value) {
 
 // Part 2: interpret loop
 // notice: only modify `Env`s, only create others and refer to existing items
-struct Element *apply(struct Element *ele, struct Element **args, int arg_count,
-                      struct Env *parent);
+struct Element *apply(struct Element *ele, struct Element **args,
+                      int arg_count);
 
 // `lambda`, `cond` and `define` accepts un-evaluated elements as arguments, so
 // they are not able to be built-ins, only compiler plugins (macros).
@@ -212,19 +216,21 @@ struct Element *eval(struct Element *ele, struct Env *env) {
     for (int i = 0; i < arg_count; i++) {
       args[i] = eval(ele->value.list_value->elements[i + 1], env);
     }
-    return apply(callable, args, arg_count, env);
+    return apply(callable, args, arg_count);
   }
   }
 }
 
-struct Element *apply(struct Element *ele, struct Element **args, int arg_count,
-                      struct Env *parent) {
+struct Element *apply(struct Element *ele, struct Element **args,
+                      int arg_count) {
   if (ele->type != TYPE_LAMBDA && ele->type != TYPE_BUILTIN) {
     fprintf(stderr, "apply an un-callable element\n");
     exit(1);
   }
   if (ele->type == TYPE_BUILTIN) {
-    return ele->value.builtin_value(args, arg_count, parent);
+    // built-in does not need its own env, just use its parent's one if exists
+    return ele->value.builtin_value->func(args, arg_count,
+                                          ele->value.builtin_value->parent);
   } else {
     assert(ele->value.lambda_value->arg_count == arg_count);
     // lambda has a static var scope, nothing to do with `parent` argument,
@@ -364,29 +370,10 @@ struct Element *builtin_display(struct Element **args, int arg_count,
     }
     printf(")>");
     break;
-  case TYPE_LIST: {
-    int len = args[0]->value.list_value->length > DISPLAY_LIST_MAX_ITEM
-                  ? DISPLAY_LIST_MAX_ITEM
-                  : args[0]->value.list_value->length;
-    printf("(");
-    char *prefix = "";
-    for (int i = 0; i < len; i++) {
-      printf("%s", prefix);
-      prefix = " ";
-      struct Element *ele = args[0]->value.list_value->elements[i];
-      if (ele->type == TYPE_LIST) {
-        printf("(...)");
-      } else {
-        // a bad re-use example, just because of laziness
-        builtin_display(&ele, 1, parent);
-      }
-    }
-    if (len < args[0]->value.list_value->length) {
-      printf("%s...", prefix);
-    }
-    printf(")");
+  case TYPE_LIST:
+    // it is impossible that a internal list becomes evaled argument
+    assert(0);
     break;
-  }
   }
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_NULL;
@@ -469,10 +456,66 @@ struct Element *builtin_exit(struct Element **args, int arg_count,
   return ele;
 }
 
-void register_builtin(struct Env *env, char *name, Builtin builtin) {
+#define FOLDR_CALLBACK_REGISTERED_NAME "reserved_foldr-callback"
+#define FOLDR_INIT_REGISTERED_NAME "reserved_foldr-init"
+struct Element *builtin_foldr_impl(struct Element **, int, struct Env *);
+// (foldr callback init) ==>
+// ( (lambda () <built-in (args...) ...>) )
+struct Element *builtin_foldr(struct Element **args, int arg_count,
+                              struct Env *parent) {
+  assert(arg_count == 2);
+  struct Element *callback = args[0], *init = args[1];
+  assert(callback->type == TYPE_LAMBDA || callback->type == TYPE_BUILTIN);
+
+  struct Env *outer_env = create_env(parent);
+  register_(outer_env, FOLDR_CALLBACK_REGISTERED_NAME, callback);
+  register_(outer_env, FOLDR_INIT_REGISTERED_NAME, init);
+
+  struct Element *inner = malloc(sizeof(struct Element));
+  inner->type = TYPE_BUILTIN;
+  inner->value.builtin_value = malloc(sizeof(struct Builtin));
+  inner->value.builtin_value->func = builtin_foldr_impl;
+  inner->value.builtin_value->parent = outer_env;
+
+  struct Element *outer = malloc(sizeof(struct Element));
+  outer->type = TYPE_LAMBDA;
+  outer->value.lambda_value = malloc(sizeof(struct Lambda));
+  outer->value.lambda_value->parent = outer_env;
+  outer->value.lambda_value->arg_count = 0;
+  outer->value.lambda_value->body = malloc(sizeof(struct ElementList));
+  outer->value.lambda_value->body->length = 1;
+  outer->value.lambda_value->body->elements =
+      malloc(sizeof(struct Element *) * 1);
+  outer->value.lambda_value->body->elements[0] = inner;
+
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_LIST;
+  ele->value.list_value = malloc(sizeof(struct ElementList));
+  ele->value.list_value->length = 1;
+  ele->value.list_value->elements = malloc(sizeof(struct Element *) * 1);
+  ele->value.list_value->elements[0] = outer;
+
+  return eval(ele, parent);
+}
+
+struct Element *builtin_foldr_impl(struct Element **args, int arg_count,
+                                   struct Env *parent) {
+  struct Element *callback = resolve(FOLDR_CALLBACK_REGISTERED_NAME, parent),
+                 *init = resolve(FOLDR_INIT_REGISTERED_NAME, parent);
+  struct Element *product = init;
+  for (int i = arg_count - 1; i >= 0; i--) {
+    struct Element *apply_args[2] = {product, args[i]};
+    product = apply(callback, apply_args, 2);
+  }
+  return product;
+}
+
+void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
-  ele->value.builtin_value = builtin;
+  ele->value.builtin_value = malloc(sizeof(struct Builtin));
+  ele->value.builtin_value->func = builtin;
+  ele->value.builtin_value->parent = NULL; // so sad it does not have parent
   register_(env, name, ele);
 }
 
@@ -488,6 +531,7 @@ int main() {
   register_builtin(env, ">", builtin_gt);
   register_builtin(env, "nil?", builtin_is_nil);
   register_builtin(env, "exit", builtin_exit);
+  register_builtin(env, "foldr", builtin_foldr);
 
   char *source = malloc(sizeof(char) * SRC_INIT_LEN);
   source[0] = '\0';
@@ -500,7 +544,7 @@ int main() {
     if (line_len < 0) {
       break;
     }
-    source = realloc(source, sizeof(char) * (len + line_len));
+    source = realloc(source, sizeof(char) * (len + line_len + 1));
     strcat(source, line);
     len += line_len;
   }
