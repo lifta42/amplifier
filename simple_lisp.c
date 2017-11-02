@@ -284,6 +284,11 @@ struct Element *parse(char *source, int *pos) {
       char *name = malloc(sizeof(char) * MAX_NAME_LEN);
       int name_len = 0;
       while (!isspace(source[*pos]) && source[*pos] != ')') {
+        if (name_len == MAX_NAME_LEN - 1) {
+          source[MAX_NAME_LEN - 1] = '\0';
+          fprintf(stderr, "name %s... exceed name length limitation\n", source);
+          exit(1);
+        }
         name[name_len] = source[*pos];
         name_len++;
         (*pos)++;
@@ -545,7 +550,11 @@ void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
 }
 
 // Part 5: driver
-int main() {
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    printf("Please specify entry source file as command line arguement.\n");
+    return 0;
+  }
   struct Env *env = create_env(NULL);
   register_builtin(env, "+", builtin_add);
   register_builtin(env, "-", builtin_sub);
@@ -559,21 +568,26 @@ int main() {
   register_builtin(env, "foldr", builtin_foldr);
   register_builtin(env, "pipe", builtin_pipe);
 
-  char *source = malloc(sizeof(char) * SRC_INIT_LEN);
-  source[0] = '\0';
+  char *source = NULL;
   int len = 0;
-  // read whole `stdin` into `source`
+  // read whole file into `source`
+  FILE *file = fopen(argv[1], "r");
   while (1) {
     char *line = NULL;
     int line_len = 0;
-    line_len = (int)getline(&line, (size_t *)&line_len, stdin);
+    line_len = (int)getline(&line, (size_t *)&line_len, file);
     if (line_len < 0) {
       break;
     }
-    source = realloc(source, sizeof(char) * (len + line_len + 1));
-    strcat(source, line);
+    if (source == NULL) {
+      source = line;
+    } else {
+      source = realloc(source, sizeof(char) * (len + line_len + 1));
+      strcat(source, line);
+    }
     len += line_len;
   }
+  fclose(file);
 
   int pos = 0;
   while (pos != len) {
