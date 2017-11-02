@@ -491,6 +491,50 @@ struct Element *builtin_foldr_impl(struct Element **args, int arg_count,
   return product;
 }
 
+struct Element *builtin_pipe_impl(struct Element **, int, struct Env *);
+// (pipe f g) with f :: (lambda (<args: length=x>) ...), g :: (lambda (x) ...)
+// ==> (lambda (<args: length=x>) (g (f args...)))
+struct Element *builtin_pipe(struct Element **args, int arg_count,
+                             struct Env *parent) {
+  assert(arg_count >= 2);
+  struct Element *func_list = malloc(sizeof(struct Element *));
+  func_list->type = TYPE_LIST;
+  func_list->value.list_value = malloc(sizeof(struct ElementList *));
+  func_list->value.list_value->length = arg_count;
+  func_list->value.list_value->elements =
+      malloc(sizeof(struct Element *) * arg_count);
+  for (int i = 0; i < arg_count; i++) {
+    assert(args[i]->type == TYPE_LAMBDA || args[i]->type == TYPE_BUILTIN);
+    func_list->value.list_value->elements[i] = args[i];
+  }
+
+  struct Env *env = create_env(parent);
+  register_(env, "_func_list", func_list);
+
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_BUILTIN;
+  ele->value.builtin_value = malloc(sizeof(struct Builtin));
+  ele->value.builtin_value->func = builtin_pipe_impl;
+  ele->value.builtin_value->parent = env;
+
+  return ele;
+}
+
+struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
+                                  struct Env *parent) {
+  struct Element *func_list = resolve("_func_list", parent);
+  struct Element **current_args = args;
+  struct Element *current_result = NULL; // to prevent rvalue ref
+  int current_arg_count = arg_count;
+  for (int i = 0; i < func_list->value.list_value->length; i++) {
+    struct Element *func = func_list->value.list_value->elements[i];
+    current_result = apply(func, current_args, current_arg_count);
+    current_args = &current_result;
+    current_arg_count = 1;
+  }
+  return current_args[0];
+}
+
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
@@ -513,6 +557,7 @@ int main() {
   register_builtin(env, "nil?", builtin_is_nil);
   register_builtin(env, "exit", builtin_exit);
   register_builtin(env, "foldr", builtin_foldr);
+  register_builtin(env, "pipe", builtin_pipe);
 
   char *source = malloc(sizeof(char) * SRC_INIT_LEN);
   source[0] = '\0';

@@ -21,3 +21,15 @@
 (define list-display (list-map print-line))
 
 (list-display list-example)
+
+(define foldl (lambda (f init)
+  (define fold (lambda (acc)
+    (lambda (args)
+      (cond ((nil? args)
+        acc)
+      (else
+        ((fold (f acc (car args))) (cdr args)))))))
+  (pipe list (fold init))))
+
+(define display-args (foldl (lambda (acc item) (print-line item)) nil))
+(display-args 42 43 44 45)
