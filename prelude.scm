@@ -45,8 +45,6 @@
   ) (list-foldl (lambda (acc item) (cons (f item) acc)) nil lst))
 ))
 
-(define list-display (lambda (lst) (list-map print-line lst)))
-
 (define foldl (lambda (f init)
   (pipe list (lambda (lst) (list-foldl f init lst)))
 ))
@@ -65,4 +63,18 @@
   (this is an (quote list example list and) (the (number is) 42.))
 ))
 
-(define literal-example (quote list 'My name is liftA42.'))
+(define literal-example (quote list 'Hello, liftA42!'))
+
+(define list-print-string (lambda (str)
+  (list-map display-char str)
+  (newline)
+))
+
+(define list-append (lambda (lst x)
+  (cond ((nil? lst)
+    (cons x nil))
+  (else
+    (cons (car lst) (list-append (cdr lst) x))))
+))
+
+(list-print-string literal-example)

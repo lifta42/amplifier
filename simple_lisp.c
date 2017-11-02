@@ -279,15 +279,17 @@ struct Element *apply(struct Element *ele, struct Element **args,
 
 // Part 3: parser
 // notice: create everything here
+// this function will return NULL (not element with type TYPE_NULL) only in two
+// cases:
+// 1. reaching '\0' before anything else
+// 2. reaching ')' before anything else after parsing a comment line
 struct Element *parse(char *source, int *pos) {
   while (isspace(source[*pos])) {
     (*pos)++;
   }
 
   if (source[*pos] == '\0') {
-    struct Element *element = malloc(sizeof(struct Element));
-    element->type = TYPE_NULL;
-    return element;
+    return NULL;
   }
 
   if (source[*pos] == ';') {
@@ -295,7 +297,18 @@ struct Element *parse(char *source, int *pos) {
       (*pos)++;
     }
     (*pos)++;
+    while (isspace(source[*pos])) {
+      (*pos)++;
+    }
+    if (source[*pos] == ')') {
+      return NULL;
+    }
     return parse(source, pos);
+  }
+
+  if (source[*pos] == ')') {
+    fprintf(stderr, "unexpected \")\" appeared\n");
+    exit(PARSE_ERROR);
   }
 
   if (source[*pos] != '(') {
@@ -418,7 +431,9 @@ struct Element *parse(char *source, int *pos) {
     }
     while (source[*pos] != ')') {
       child_list[child_count] = parse(source, pos);
-      child_count++;
+      if (child_list[child_count] != NULL) {
+        child_count++;
+      }
       while (isspace(source[*pos])) {
         (*pos)++;
       }
@@ -640,6 +655,25 @@ struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
   return current_args[0];
 }
 
+struct Element *builtin_display_char(struct Element **args, int arg_count,
+                                     struct Env *parent) {
+  assert(arg_count == 1);
+  assert(args[0]->type == TYPE_INT);
+  int code = args[0]->value.int_value;
+  if (code > 255 || !isprint(code)) {
+    // this usually happens in the middle of string printing, so insert a line
+    // break to prevent corrupting
+    // this case does not happen on macOS, since it flushes stdout per line
+    fprintf(stderr, "\nattempt to display out-of-range char: %d\n", code);
+    exit(RUNTIME_ERROR);
+  } else {
+    printf("%c", (char)code);
+  }
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_NULL;
+  return ele;
+}
+
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
@@ -667,6 +701,7 @@ int main(int argc, char *argv[]) {
   register_builtin(env, "exit", builtin_exit);
   register_builtin(env, "foldr", builtin_foldr);
   register_builtin(env, "pipe", builtin_pipe);
+  register_builtin(env, "display-char", builtin_display_char);
 
   char *source = NULL;
   int len = 0;
@@ -695,6 +730,9 @@ int main(int argc, char *argv[]) {
 
   int pos = 0;
   while (pos != len) {
-    eval(parse(source, &pos), env);
+    struct Element *root = parse(source, &pos);
+    if (root != NULL) {
+      eval(root, env);
+    }
   }
 }
