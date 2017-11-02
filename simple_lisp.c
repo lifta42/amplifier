@@ -1,5 +1,5 @@
 // A simple parser and runtime for minimal LISP.
-// 12:35, 2017.10.30 by liftA42.
+// Created: 12:35, 2017.10.30 by liftA42.
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -114,6 +114,7 @@ void register_(struct Env *env, char *name, struct Element *value) {
 
 // Part 2: interpret loop
 // notice: only modify `Env`s, only create others and refer to existing items
+struct Element *eval(struct Element *ele, struct Env *env);
 struct Element *apply(struct Element *ele, struct Element **args,
                       int arg_count);
 
@@ -145,7 +146,30 @@ struct Element *eval_lambda(struct Element *lambda, struct Env *parent) {
   return ele;
 }
 
-struct Element *eval(struct Element *ele, struct Env *env);
+struct Element *eval_quote_impl(struct Element *, struct Element *);
+
+struct Element *eval_quote(struct Element *quoted, struct Env *parent) {
+  assert(quoted->value.list_value->length == 3);
+  struct Element *join = eval(quoted->value.list_value->elements[1], parent),
+                 *raw = quoted->value.list_value->elements[2];
+  assert(join->type == TYPE_LAMBDA || join->type == TYPE_BUILTIN);
+  return eval_quote_impl(raw, join);
+}
+
+struct Element *eval_quote_impl(struct Element *raw, struct Element *join) {
+  if (raw->type != TYPE_LIST) {
+    return raw;
+  } else {
+    int child_count = raw->value.list_value->length;
+    // maybe `children` is a better name
+    struct Element **child_list =
+        malloc(sizeof(struct Element *) * child_count);
+    for (int i = 0; i < child_count; i++) {
+      child_list[i] = eval_quote_impl(raw->value.list_value->elements[i], join);
+    }
+    return apply(join, child_list, child_count);
+  }
+}
 
 struct Element *eval_cond(struct Element *cond, struct Env *parent) {
   assert(cond->value.list_value->length >= 2);
@@ -201,6 +225,8 @@ struct Element *eval(struct Element *ele, struct Env *env) {
         return eval_cond(ele, env);
       } else if (strcmp(callable->value.name_value, "define") == 0) {
         return eval_define(ele, env);
+      } else if (strcmp(callable->value.name_value, "quote") == 0) {
+        return eval_quote(ele, env);
       } else {
         callable = resolve(callable->value.name_value, env);
       }
@@ -282,7 +308,8 @@ struct Element *parse(char *source, int *pos) {
     } else {
       char *name = malloc(sizeof(char) * MAX_NAME_LEN);
       int name_len = 0;
-      while (!isspace(source[*pos]) && source[*pos] != ')') {
+      while (!isspace(source[*pos]) && source[*pos] != '(' &&
+             source[*pos] != ')') {
         if (name_len == MAX_NAME_LEN - 1) {
           source[MAX_NAME_LEN - 1] = '\0';
           fprintf(stderr, "name %s... exceed name length limitation\n", source);
@@ -572,6 +599,10 @@ int main(int argc, char *argv[]) {
   int len = 0;
   // read whole file into `source`
   FILE *file = fopen(argv[1], "r");
+  if (file == NULL) {
+    fprintf(stderr, "can not open file \"%s\"\n", argv[1]);
+    exit(1);
+  }
   while (1) {
     char *line = NULL;
     int line_len = 0;

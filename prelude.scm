@@ -1,3 +1,6 @@
+; Include some useful misc and act like a standard library
+; Upgraded from a demo: 13:20, 2017.11.2 by liftA42.
+
 (define cons (lambda (h t) (lambda (f) (f h t))))
 (define car (lambda (c) (c (lambda (h t) h))))
 (define cdr (lambda (c) (c (lambda (h t) t))))
@@ -34,7 +37,8 @@
   (list-foldl cons nil lst)
 ))
 
-; cannot use `list-foldr` directly, because eval order must be left to right
+; cannot use `list-foldr` directly, because eval order must be from left to
+; right
 (define list-map (lambda (f lst)
   ((lambda (reversed-mapped)
     (list-reverse reversed-mapped)
@@ -46,3 +50,18 @@
 (define foldl (lambda (f init)
   (pipe list (lambda (lst) (list-foldl f init lst)))
 ))
+
+(define list-index (lambda (i lst)
+  (cond ((nil? lst)
+    nil)
+  ((= i 0)
+    (car lst))
+  (else
+    (list-index (- i 1) (cdr lst))
+  ))
+))
+
+(define quoted-example (quote list
+  (this is an (quote list example list and) (the (number is) 42.))
+))
+(print-line (car (list-index 3 quoted-example)))
