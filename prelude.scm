@@ -64,4 +64,5 @@
 (define quoted-example (quote list
   (this is an (quote list example list and) (the (number is) 42.))
 ))
-(print-line (car (list-index 3 quoted-example)))
+
+(define literal-example (quote list 'My name is liftA42.'))

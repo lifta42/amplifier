@@ -12,6 +12,10 @@
 
 #define DISPLAY_LIST_MAX_ITEM 3
 
+#define PRE_PARSE_ERROR 1
+#define PARSE_ERROR 2
+#define RUNTIME_ERROR 3
+
 // Part 1: data structure
 // notice: store primitive types in place, refer `struct X`  and strings with
 // pointer
@@ -84,7 +88,7 @@ struct Env *create_env(struct Env *parent) {
 struct Element *resolve(char *name, struct Env *env) {
   if (env == NULL) {
     fprintf(stderr, "there is no var called %s\n", name);
-    exit(1);
+    exit(RUNTIME_ERROR);
   }
   for (int i = 0; i < env->length; i++) {
     if (strcmp(name, env->values[i]->name) == 0) {
@@ -250,7 +254,7 @@ struct Element *apply(struct Element *ele, struct Element **args,
                       int arg_count) {
   if (ele->type != TYPE_LAMBDA && ele->type != TYPE_BUILTIN) {
     fprintf(stderr, "apply an un-callable element\n");
-    exit(1);
+    exit(RUNTIME_ERROR);
   }
   if (ele->type == TYPE_BUILTIN) {
     // built-in does not need its own env, just use its parent's one if exists
@@ -305,22 +309,91 @@ struct Element *parse(char *source, int *pos) {
       ele->type = TYPE_INT;
       ele->value.int_value = n;
       return ele;
+    } else if (source[*pos] == '\'') {
+      // (car (quote list 'foo')) ==> (car (quote list (102 111 111))) ==>
+      // (car (cons 102 (cons 111 (cons 111 nil)))) ==> 102
+      // it must appear inside of `(quote some-join <here>)`, or calling
+      // un-callable var (`102` above) exception would be raised
+      // use single quotation mark so that `"` can appear without backslash
+      // notice: only take effect when following a space, so `fac'` and
+      // `six-o'clock` will be normal names
+      (*pos)++;
+      struct Element **char_seq =
+          malloc(sizeof(struct Element *) * LIST_MAX_SIZE);
+      int char_count = 0;
+      while (source[*pos] != '\'') {
+        char c = source[*pos];
+        if (c == '\\') {
+          (*pos)++;
+          switch (source[*pos]) {
+          case 'n':
+            c = '\n';
+            break;
+          case 't':
+            c = '\t';
+            break;
+          case '\'':
+            c = '\'';
+            break;
+          case '\\':
+            c = '\\';
+            break;
+          default:
+            fprintf(stderr, "escape sequence \"\\%c\" is not recognizable\n",
+                    source[*pos]);
+            exit(PARSE_ERROR);
+          }
+        }
+        if (char_count == LIST_MAX_SIZE - 1) {
+          // nothing else uses stack, so neither does this even stack is usable
+          // same to `free()`
+          char *literal = malloc(sizeof(char) * LIST_MAX_SIZE);
+          for (int i = 0; i < LIST_MAX_SIZE - 1; i++) {
+            literal[i] = (char)char_seq[i]->value.int_value;
+          }
+          literal[LIST_MAX_SIZE - 1] = '\0';
+          fprintf(stderr,
+                  "string literal \"%s...\" exceed list length limitation\n",
+                  literal);
+          exit(PARSE_ERROR);
+        }
+        struct Element *ele = malloc(sizeof(struct Element));
+        ele->type = TYPE_INT;
+        ele->value.int_value = (int)c;
+        char_seq[char_count] = ele;
+        char_count++;
+        (*pos)++;
+      }
+      (*pos)++; // for ending quotes
+      struct Element *ele = malloc(sizeof(struct Element));
+      ele->type = TYPE_LIST;
+      ele->value.list_value = malloc(sizeof(struct ElementList));
+      ele->value.list_value->length = char_count;
+      ele->value.list_value->elements =
+          malloc(sizeof(struct Element *) * char_count);
+      for (int i = 0; i < char_count; i++) {
+        ele->value.list_value->elements[i] = char_seq[i];
+      }
+      return ele;
     } else {
       char *name = malloc(sizeof(char) * MAX_NAME_LEN);
       int name_len = 0;
       while (!isspace(source[*pos]) && source[*pos] != '(' &&
              source[*pos] != ')') {
         if (name_len == MAX_NAME_LEN - 1) {
-          source[MAX_NAME_LEN - 1] = '\0';
-          fprintf(stderr, "name %s... exceed name length limitation\n", source);
-          exit(1);
+          name[name_len] = '\0';
+          fprintf(stderr, "name \"%s...\" exceed name length limitation\n",
+                  name);
+          exit(PARSE_ERROR);
         }
         name[name_len] = source[*pos];
         name_len++;
         (*pos)++;
       }
       name[name_len] = '\0';
-      // alternative way is to define a built-in, but I do not like `(nil)`
+      // alternative way is to define a built-in, but I do not like `(nil)`,
+      // or to use something like `(define nil ((lambda () (define foo))))`
+      // which I do not like either
       if (strcmp(name, "nil") == 0) {
         struct Element *ele = malloc(sizeof(struct Element));
         ele->type = TYPE_NULL;
@@ -601,7 +674,7 @@ int main(int argc, char *argv[]) {
   FILE *file = fopen(argv[1], "r");
   if (file == NULL) {
     fprintf(stderr, "can not open file \"%s\"\n", argv[1]);
-    exit(1);
+    exit(PRE_PARSE_ERROR);
   }
   while (1) {
     char *line = NULL;
