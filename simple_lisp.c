@@ -26,7 +26,7 @@ enum ElementType {
   TYPE_LIST,
   TYPE_BUILTIN,
   TYPE_LAMBDA,
-  TYPE_NULL
+  TYPE_NULL // nil
 };
 
 struct ElementList;
@@ -279,31 +279,178 @@ struct Element *apply(struct Element *ele, struct Element **args,
 
 // Part 3: parser
 // notice: create everything here
+struct Element *parse(char *source, int *pos);
+
+void parse_ignore_space(char *source, int *pos) {
+  while (isspace(source[*pos])) {
+    (*pos)++;
+  }
+}
+
+struct Element *parse_comment(char *source, int *pos) {
+  while (source[*pos] != '\n') {
+    (*pos)++;
+  }
+  (*pos)++;
+  while (isspace(source[*pos])) {
+    (*pos)++;
+  }
+  if (source[*pos] == ')') {
+    return NULL;
+  }
+  return parse(source, pos);
+}
+
+struct Element *parse_number(char *source, int *pos) {
+  // only int actually
+  int n = 0;
+  while (isdigit(source[*pos])) {
+    n = n * 10 + (source[*pos] - '0');
+    (*pos)++;
+  }
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_INT;
+  ele->value.int_value = n;
+  return ele;
+}
+
+struct Element *parse_string(char *source, int *pos) {
+  // (car (quote list 'foo')) ==> (car (quote list (102 111 111))) ==>
+  // (car (cons 102 (cons 111 (cons 111 nil)))) ==> 102
+  // it must appear inside of `(quote some-join <here>)`, or calling
+  // un-callable var (`102` above) exception would be raised
+  // use single quotation mark so that `"` can appear without backslash
+  // notice: only take effect when following a space, so `fac'` and
+  // `six-o'clock` will be normal names
+  (*pos)++;
+  struct Element **char_seq = malloc(sizeof(struct Element *) * LIST_MAX_SIZE);
+  int char_count = 0;
+  while (source[*pos] != '\'') {
+    char c = source[*pos];
+    if (c == '\\') {
+      (*pos)++;
+      switch (source[*pos]) {
+      case 'n':
+        c = '\n';
+        break;
+      case 't':
+        c = '\t';
+        break;
+      case '\'':
+        c = '\'';
+        break;
+      case '\\':
+        c = '\\';
+        break;
+      default:
+        fprintf(stderr, "escape sequence \"\\%c\" is not recognizable\n",
+                source[*pos]);
+        exit(PARSE_ERROR);
+      }
+    }
+    if (char_count == LIST_MAX_SIZE - 1) {
+      // nothing else uses stack, so neither does this even stack is usable
+      // same to `free()`
+      char *literal = malloc(sizeof(char) * LIST_MAX_SIZE);
+      for (int i = 0; i < LIST_MAX_SIZE - 1; i++) {
+        literal[i] = (char)char_seq[i]->value.int_value;
+      }
+      literal[LIST_MAX_SIZE - 1] = '\0';
+      fprintf(stderr,
+              "string literal \"%s...\" exceed list length limitation\n",
+              literal);
+      exit(PARSE_ERROR);
+    }
+    struct Element *ele = malloc(sizeof(struct Element));
+    ele->type = TYPE_INT;
+    ele->value.int_value = (int)c;
+    char_seq[char_count] = ele;
+    char_count++;
+    (*pos)++;
+  }
+  (*pos)++; // for ending quotes
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_LIST;
+  ele->value.list_value = malloc(sizeof(struct ElementList));
+  ele->value.list_value->length = char_count;
+  ele->value.list_value->elements =
+      malloc(sizeof(struct Element *) * char_count);
+  for (int i = 0; i < char_count; i++) {
+    ele->value.list_value->elements[i] = char_seq[i];
+  }
+  return ele;
+}
+
+struct Element *parse_name(char *source, int *pos) {
+  // nil is also here
+  char *name = malloc(sizeof(char) * MAX_NAME_LEN);
+  int name_len = 0;
+  while (!isspace(source[*pos]) && source[*pos] != '(' && source[*pos] != ')') {
+    if (name_len == MAX_NAME_LEN - 1) {
+      name[name_len] = '\0';
+      fprintf(stderr, "name \"%s...\" exceed name length limitation\n", name);
+      exit(PARSE_ERROR);
+    }
+    name[name_len] = source[*pos];
+    name_len++;
+    (*pos)++;
+  }
+  name[name_len] = '\0';
+  // alternative way is to define a built-in, but I do not like `(nil)`,
+  // or to use something like `(define nil ((lambda () (define foo))))`
+  // which I do not like either
+  if (strcmp(name, "nil") == 0) {
+    struct Element *ele = malloc(sizeof(struct Element));
+    ele->type = TYPE_NULL;
+    return ele;
+  } else {
+    struct Element *ele = malloc(sizeof(struct Element));
+    ele->type = TYPE_NAME;
+    ele->value.name_value = name;
+    return ele;
+  }
+}
+
+struct Element *parse_list(char *source, int *pos) {
+  (*pos)++;
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_LIST;
+  ele->value.list_value = malloc(sizeof(struct ElementList));
+  int child_count = 0;
+  struct Element *child_list[LIST_MAX_SIZE];
+
+  parse_ignore_space(source, pos);
+  while (source[*pos] != ')') {
+    child_list[child_count] = parse(source, pos);
+    // check postfix comment
+    if (child_list[child_count] != NULL) {
+      child_count++;
+    }
+    parse_ignore_space(source, pos);
+  }
+  (*pos)++; // for ')'
+  ele->value.list_value->length = child_count;
+  ele->value.list_value->elements =
+      malloc(sizeof(struct Element *) * child_count);
+  for (int i = 0; i < child_count; i++) {
+    ele->value.list_value->elements[i] = child_list[i];
+  }
+  return ele;
+}
+
 // this function will return NULL (not element with type TYPE_NULL) only in two
 // cases:
 // 1. reaching '\0' before anything else
 // 2. reaching ')' before anything else after parsing a comment line
 struct Element *parse(char *source, int *pos) {
-  while (isspace(source[*pos])) {
-    (*pos)++;
-  }
+  parse_ignore_space(source, pos);
 
   if (source[*pos] == '\0') {
     return NULL;
   }
 
   if (source[*pos] == ';') {
-    while (source[*pos] != '\n') {
-      (*pos)++;
-    }
-    (*pos)++;
-    while (isspace(source[*pos])) {
-      (*pos)++;
-    }
-    if (source[*pos] == ')') {
-      return NULL;
-    }
-    return parse(source, pos);
+    return parse_comment(source, pos);
   }
 
   if (source[*pos] == ')') {
@@ -313,139 +460,14 @@ struct Element *parse(char *source, int *pos) {
 
   if (source[*pos] != '(') {
     if (isdigit(source[*pos])) {
-      int n = 0;
-      while (isdigit(source[*pos])) {
-        n = n * 10 + (source[*pos] - '0');
-        (*pos)++;
-      }
-      struct Element *ele = malloc(sizeof(struct Element));
-      ele->type = TYPE_INT;
-      ele->value.int_value = n;
-      return ele;
+      return parse_number(source, pos);
     } else if (source[*pos] == '\'') {
-      // (car (quote list 'foo')) ==> (car (quote list (102 111 111))) ==>
-      // (car (cons 102 (cons 111 (cons 111 nil)))) ==> 102
-      // it must appear inside of `(quote some-join <here>)`, or calling
-      // un-callable var (`102` above) exception would be raised
-      // use single quotation mark so that `"` can appear without backslash
-      // notice: only take effect when following a space, so `fac'` and
-      // `six-o'clock` will be normal names
-      (*pos)++;
-      struct Element **char_seq =
-          malloc(sizeof(struct Element *) * LIST_MAX_SIZE);
-      int char_count = 0;
-      while (source[*pos] != '\'') {
-        char c = source[*pos];
-        if (c == '\\') {
-          (*pos)++;
-          switch (source[*pos]) {
-          case 'n':
-            c = '\n';
-            break;
-          case 't':
-            c = '\t';
-            break;
-          case '\'':
-            c = '\'';
-            break;
-          case '\\':
-            c = '\\';
-            break;
-          default:
-            fprintf(stderr, "escape sequence \"\\%c\" is not recognizable\n",
-                    source[*pos]);
-            exit(PARSE_ERROR);
-          }
-        }
-        if (char_count == LIST_MAX_SIZE - 1) {
-          // nothing else uses stack, so neither does this even stack is usable
-          // same to `free()`
-          char *literal = malloc(sizeof(char) * LIST_MAX_SIZE);
-          for (int i = 0; i < LIST_MAX_SIZE - 1; i++) {
-            literal[i] = (char)char_seq[i]->value.int_value;
-          }
-          literal[LIST_MAX_SIZE - 1] = '\0';
-          fprintf(stderr,
-                  "string literal \"%s...\" exceed list length limitation\n",
-                  literal);
-          exit(PARSE_ERROR);
-        }
-        struct Element *ele = malloc(sizeof(struct Element));
-        ele->type = TYPE_INT;
-        ele->value.int_value = (int)c;
-        char_seq[char_count] = ele;
-        char_count++;
-        (*pos)++;
-      }
-      (*pos)++; // for ending quotes
-      struct Element *ele = malloc(sizeof(struct Element));
-      ele->type = TYPE_LIST;
-      ele->value.list_value = malloc(sizeof(struct ElementList));
-      ele->value.list_value->length = char_count;
-      ele->value.list_value->elements =
-          malloc(sizeof(struct Element *) * char_count);
-      for (int i = 0; i < char_count; i++) {
-        ele->value.list_value->elements[i] = char_seq[i];
-      }
-      return ele;
+      return parse_string(source, pos);
     } else {
-      char *name = malloc(sizeof(char) * MAX_NAME_LEN);
-      int name_len = 0;
-      while (!isspace(source[*pos]) && source[*pos] != '(' &&
-             source[*pos] != ')') {
-        if (name_len == MAX_NAME_LEN - 1) {
-          name[name_len] = '\0';
-          fprintf(stderr, "name \"%s...\" exceed name length limitation\n",
-                  name);
-          exit(PARSE_ERROR);
-        }
-        name[name_len] = source[*pos];
-        name_len++;
-        (*pos)++;
-      }
-      name[name_len] = '\0';
-      // alternative way is to define a built-in, but I do not like `(nil)`,
-      // or to use something like `(define nil ((lambda () (define foo))))`
-      // which I do not like either
-      if (strcmp(name, "nil") == 0) {
-        struct Element *ele = malloc(sizeof(struct Element));
-        ele->type = TYPE_NULL;
-        return ele;
-      } else {
-        struct Element *ele = malloc(sizeof(struct Element));
-        ele->type = TYPE_NAME;
-        ele->value.name_value = name;
-        return ele;
-      }
+      return parse_name(source, pos);
     }
   } else {
-    (*pos)++;
-    struct Element *ele = malloc(sizeof(struct Element));
-    ele->type = TYPE_LIST;
-    ele->value.list_value = malloc(sizeof(struct ElementList));
-    int child_count = 0;
-    struct Element *child_list[LIST_MAX_SIZE];
-
-    while (isspace(source[*pos])) {
-      (*pos)++;
-    }
-    while (source[*pos] != ')') {
-      child_list[child_count] = parse(source, pos);
-      if (child_list[child_count] != NULL) {
-        child_count++;
-      }
-      while (isspace(source[*pos])) {
-        (*pos)++;
-      }
-    }
-    (*pos)++; // for ')'
-    ele->value.list_value->length = child_count;
-    ele->value.list_value->elements =
-        malloc(sizeof(struct Element *) * child_count);
-    for (int i = 0; i < child_count; i++) {
-      ele->value.list_value->elements[i] = child_list[i];
-    }
-    return ele;
+    return parse_list(source, pos);
   }
 }
 
