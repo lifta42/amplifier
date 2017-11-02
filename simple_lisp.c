@@ -683,6 +683,36 @@ void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   register_(env, name, ele);
 }
 
+void register_argv(struct Env *env, int argc, char *argv[]) {
+  struct Element *argv_list = malloc(sizeof(struct Element));
+  argv_list->type = TYPE_LIST;
+  argv_list->value.list_value = malloc(sizeof(struct ElementList));
+  argv_list->value.list_value->length = argc;
+  argv_list->value.list_value->elements =
+      malloc(sizeof(struct Element *) * argc);
+  for (int i = 0; i < argc; i++) {
+    int argv_len = strlen(argv[i]);
+    if (argv_len > LIST_MAX_SIZE) {
+      fprintf(stderr, "warning: argv \"%s\" is too long and will be cropped\n",
+              argv[i]);
+      argv_len = LIST_MAX_SIZE;
+    }
+    struct Element *ele = malloc(sizeof(struct Element));
+    ele->type = TYPE_LIST;
+    ele->value.list_value = malloc(sizeof(struct ElementList));
+    ele->value.list_value->length = argv_len;
+    ele->value.list_value->elements =
+        malloc(sizeof(struct Element *) * argv_len);
+    for (int j = 0; j < argv_len; j++) {
+      ele->value.list_value->elements[j] = malloc(sizeof(struct Element));
+      ele->value.list_value->elements[j]->type = TYPE_INT;
+      ele->value.list_value->elements[j]->value.int_value = (int)argv[i][j];
+    }
+    argv_list->value.list_value->elements[i] = ele;
+  }
+  register_(env, "argv", argv_list);
+}
+
 // Part 5: driver
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -690,6 +720,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
   struct Env *env = create_env(NULL);
+  register_argv(env, argc, argv);
   register_builtin(env, "+", builtin_add);
   register_builtin(env, "-", builtin_sub);
   register_builtin(env, "*", builtin_mul);
