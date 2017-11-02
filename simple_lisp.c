@@ -64,6 +64,22 @@ struct ElementList {
   int length;
 };
 
+struct Element *create_element_null() {
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_NULL;
+  return ele;
+}
+
+// notice: this function do NOT create a `ElementList`
+struct Element *create_element_list(int length) {
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_LIST;
+  ele->value.list_value = malloc(sizeof(struct ElementList));
+  ele->value.list_value->length = length;
+  ele->value.list_value->elements = malloc(sizeof(struct Element *) * length);
+  return ele;
+}
+
 struct EnvPair {
   char *name;
   struct Element *value;
@@ -192,9 +208,7 @@ struct Element *eval_cond(struct Element *cond, struct Env *parent) {
       return eval(branch->value.list_value->elements[1], parent);
     }
   }
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_NULL;
-  return ele;
+  return create_element_null();
 }
 
 struct Element *eval_define(struct Element *def, struct Env *parent) {
@@ -205,9 +219,7 @@ struct Element *eval_define(struct Element *def, struct Env *parent) {
   register_(parent, name->value.name_value,
             eval(def->value.list_value->elements[2], parent));
 
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_NULL;
-  return ele;
+  return create_element_null();
 }
 
 struct Element *eval(struct Element *ele, struct Env *env) {
@@ -369,12 +381,7 @@ struct Element *parse_string(char *source, int *pos) {
     (*pos)++;
   }
   (*pos)++; // for ending quotes
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_LIST;
-  ele->value.list_value = malloc(sizeof(struct ElementList));
-  ele->value.list_value->length = char_count;
-  ele->value.list_value->elements =
-      malloc(sizeof(struct Element *) * char_count);
+  struct Element *ele = create_element_list(char_count);
   for (int i = 0; i < char_count; i++) {
     ele->value.list_value->elements[i] = char_seq[i];
   }
@@ -413,9 +420,6 @@ struct Element *parse_name(char *source, int *pos) {
 
 struct Element *parse_list(char *source, int *pos) {
   (*pos)++;
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_LIST;
-  ele->value.list_value = malloc(sizeof(struct ElementList));
   int child_count = 0;
   struct Element *child_list[LIST_MAX_SIZE];
 
@@ -429,9 +433,7 @@ struct Element *parse_list(char *source, int *pos) {
     parse_ignore_space(source, pos);
   }
   (*pos)++; // for ')'
-  ele->value.list_value->length = child_count;
-  ele->value.list_value->elements =
-      malloc(sizeof(struct Element *) * child_count);
+  struct Element *ele = create_element_list(child_count);
   for (int i = 0; i < child_count; i++) {
     ele->value.list_value->elements[i] = child_list[i];
   }
@@ -516,9 +518,7 @@ struct Element *builtin_display(struct Element **args, int arg_count,
     assert(0);
     break;
   }
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_NULL;
-  return ele;
+  return create_element_null();
 }
 
 struct Element *builtin_eq(struct Element **args, int arg_count,
@@ -570,9 +570,7 @@ struct Element *builtin_newline(struct Element **args, int arg_count,
                                 struct Env *parent) {
   assert(arg_count == 0);
   printf("\n");
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_NULL;
-  return ele;
+  return create_element_null();
 }
 
 struct Element *builtin_is_nil(struct Element **args, int arg_count,
@@ -592,9 +590,7 @@ struct Element *builtin_exit(struct Element **args, int arg_count,
   assert(args[0]->type == TYPE_INT);
   exit(args[0]->value.int_value);
   // trivial
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_NULL;
-  return ele;
+  return create_element_null();
 }
 
 #define FOLDR_CALLBACK_REGISTERED_NAME "reserved_foldr-callback"
@@ -691,9 +687,7 @@ struct Element *builtin_display_char(struct Element **args, int arg_count,
   } else {
     printf("%c", (char)code);
   }
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_NULL;
-  return ele;
+  return create_element_null();
 }
 
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
@@ -706,12 +700,7 @@ void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
 }
 
 void register_argv(struct Env *env, int argc, char *argv[]) {
-  struct Element *argv_list = malloc(sizeof(struct Element));
-  argv_list->type = TYPE_LIST;
-  argv_list->value.list_value = malloc(sizeof(struct ElementList));
-  argv_list->value.list_value->length = argc;
-  argv_list->value.list_value->elements =
-      malloc(sizeof(struct Element *) * argc);
+  struct Element *argv_list = create_element_list(argc);
   for (int i = 0; i < argc; i++) {
     int argv_len = strlen(argv[i]);
     if (argv_len > LIST_MAX_SIZE) {
@@ -719,12 +708,7 @@ void register_argv(struct Env *env, int argc, char *argv[]) {
               argv[i]);
       argv_len = LIST_MAX_SIZE;
     }
-    struct Element *ele = malloc(sizeof(struct Element));
-    ele->type = TYPE_LIST;
-    ele->value.list_value = malloc(sizeof(struct ElementList));
-    ele->value.list_value->length = argv_len;
-    ele->value.list_value->elements =
-        malloc(sizeof(struct Element *) * argv_len);
+    struct Element *ele = create_element_list(argv_len);
     for (int j = 0; j < argv_len; j++) {
       ele->value.list_value->elements[j] = malloc(sizeof(struct Element));
       ele->value.list_value->elements[j]->type = TYPE_INT;
