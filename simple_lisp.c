@@ -9,7 +9,6 @@
 #define MAX_NAME_LEN 32
 #define ENV_INIT_SIZE 8
 #define LIST_MAX_SIZE 32
-#define SRC_INIT_LEN 1024
 
 #define DISPLAY_LIST_MAX_ITEM 3
 
@@ -496,6 +495,7 @@ struct Element *builtin_foldr_impl(struct Element **args, int arg_count,
   return product;
 }
 
+#define PIPE_FUNC_LIST_REGISTERED_NAME "reserved_pipe-func-list"
 struct Element *builtin_pipe_impl(struct Element **, int, struct Env *);
 // (pipe f g) with f :: (lambda (<args: length=x>) ...), g :: (lambda (x) ...)
 // ==> (lambda (<args: length=x>) (g (f args...)))
@@ -514,7 +514,7 @@ struct Element *builtin_pipe(struct Element **args, int arg_count,
   }
 
   struct Env *env = create_env(parent);
-  register_(env, "_func_list", func_list);
+  register_(env, PIPE_FUNC_LIST_REGISTERED_NAME, func_list);
 
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
@@ -527,7 +527,7 @@ struct Element *builtin_pipe(struct Element **args, int arg_count,
 
 struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
                                   struct Env *parent) {
-  struct Element *func_list = resolve("_func_list", parent);
+  struct Element *func_list = resolve(PIPE_FUNC_LIST_REGISTERED_NAME, parent);
   struct Element **current_args = args;
   struct Element *current_result = NULL; // to prevent rvalue ref
   int current_arg_count = arg_count;
