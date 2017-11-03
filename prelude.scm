@@ -52,6 +52,13 @@
   (pipe list (lambda (lst) (list-foldl f init lst)))
 ))
 
+(define quit (pipe list (lambda (lst)
+  (cond ((nil? lst)
+    (exit 0))
+  (else
+    (exit (car lst))))
+)))
+
 (define list-index (lambda (i lst)
   (cond ((nil? lst)
     nil)

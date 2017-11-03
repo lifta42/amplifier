@@ -80,6 +80,22 @@ struct Element *create_element_list(int length) {
   return ele;
 }
 
+struct Element *create_element_int(int value) {
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_INT;
+  ele->value.int_value = value;
+  return ele;
+}
+
+struct Element *create_element_bool(int value) {
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_BOOL;
+  ele->value.bool_value = value != 0;
+  return ele;
+}
+
+// rarely create lambda, built-in and name, so no util for them
+
 struct EnvPair {
   char *name;
   struct Element *value;
@@ -320,10 +336,7 @@ struct Element *parse_number(char *source, int *pos) {
     n = n * 10 + (source[*pos] - '0');
     (*pos)++;
   }
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_INT;
-  ele->value.int_value = n;
-  return ele;
+  return create_element_int(n);
 }
 
 struct Element *parse_string(char *source, int *pos) {
@@ -407,9 +420,7 @@ struct Element *parse_name(char *source, int *pos) {
   // or to use something like `(define nil ((lambda () (define foo))))`
   // which I do not like either
   if (strcmp(name, "nil") == 0) {
-    struct Element *ele = malloc(sizeof(struct Element));
-    ele->type = TYPE_NULL;
-    return ele;
+    return create_element_null();
   } else {
     struct Element *ele = malloc(sizeof(struct Element));
     ele->type = TYPE_NAME;
@@ -479,10 +490,8 @@ struct Element *builtin_add(struct Element **args, int arg_count,
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_INT;
-  ele->value.int_value = args[0]->value.int_value + args[1]->value.int_value;
-  return ele;
+  return create_element_int(args[0]->value.int_value +
+                            args[1]->value.int_value);
 }
 
 struct Element *builtin_display(struct Element **args, int arg_count,
@@ -526,10 +535,8 @@ struct Element *builtin_eq(struct Element **args, int arg_count,
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_BOOL;
-  ele->value.bool_value = args[0]->value.int_value == args[1]->value.int_value;
-  return ele;
+  return create_element_bool(args[0]->value.int_value ==
+                             args[1]->value.int_value);
 }
 
 struct Element *builtin_gt(struct Element **args, int arg_count,
@@ -537,10 +544,8 @@ struct Element *builtin_gt(struct Element **args, int arg_count,
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_BOOL;
-  ele->value.bool_value = args[0]->value.int_value > args[1]->value.int_value;
-  return ele;
+  return create_element_bool(args[0]->value.int_value >
+                             args[1]->value.int_value);
 }
 
 struct Element *builtin_mul(struct Element **args, int arg_count,
@@ -548,10 +553,8 @@ struct Element *builtin_mul(struct Element **args, int arg_count,
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_INT;
-  ele->value.int_value = args[0]->value.int_value * args[1]->value.int_value;
-  return ele;
+  return create_element_int(args[0]->value.int_value *
+                            args[1]->value.int_value);
 }
 
 struct Element *builtin_sub(struct Element **args, int arg_count,
@@ -559,26 +562,19 @@ struct Element *builtin_sub(struct Element **args, int arg_count,
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_INT;
-  ele->value.int_value = args[0]->value.int_value - args[1]->value.int_value;
-  return ele;
+  return create_element_int(args[0]->value.int_value -
+                            args[1]->value.int_value);
 }
 
 struct Element *builtin_is_nil(struct Element **args, int arg_count,
                                struct Env *parent) {
   assert(arg_count == 1);
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_BOOL;
-  ele->value.bool_value = args[0]->type == TYPE_NULL;
-  return ele;
+  return create_element_bool(args[0]->type == TYPE_NULL);
 }
 
 struct Element *builtin_exit(struct Element **args, int arg_count,
                              struct Env *parent) {
-  if (arg_count == 0) {
-    exit(0);
-  }
+  assert(arg_count == 1);
   assert(args[0]->type == TYPE_INT);
   exit(args[0]->value.int_value);
   // trivial
@@ -627,12 +623,7 @@ struct Element *builtin_pipe_impl(struct Element **, int, struct Env *);
 struct Element *builtin_pipe(struct Element **args, int arg_count,
                              struct Env *parent) {
   assert(arg_count >= 2);
-  struct Element *func_list = malloc(sizeof(struct Element *));
-  func_list->type = TYPE_LIST;
-  func_list->value.list_value = malloc(sizeof(struct ElementList *));
-  func_list->value.list_value->length = arg_count;
-  func_list->value.list_value->elements =
-      malloc(sizeof(struct Element *) * arg_count);
+  struct Element *func_list = create_element_list(arg_count);
   for (int i = 0; i < arg_count; i++) {
     assert(args[i]->type == TYPE_LAMBDA || args[i]->type == TYPE_BUILTIN);
     func_list->value.list_value->elements[i] = args[i];
@@ -693,6 +684,15 @@ struct Element *builtin_argv(struct Element **args, int arg_count,
   return eval_quote_impl(argv, join);
 }
 
+struct Element *builtin_same(struct Element **args, int arg_count,
+                             struct Env *parent) {
+  assert(arg_count == 2);
+  assert(args[0]->type == TYPE_NAME && args[1]->type == TYPE_NAME);
+  return create_element_bool(
+      strcmp(args[0]->value.name_value, args[1]->value.name_value) == 0);
+}
+
+// Part 5: driver
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
@@ -722,7 +722,6 @@ void register_argv(struct Env *env, int argc, char *argv[]) {
   register_(env, ARGV_REGISTERED_NAME, argv_list);
 }
 
-// Part 5: driver
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     printf("Please specify entry source file as command line arguement.\n");
@@ -741,6 +740,7 @@ int main(int argc, char *argv[]) {
   register_builtin(env, "foldr", builtin_foldr);
   register_builtin(env, "pipe", builtin_pipe);
   register_builtin(env, "display-char", builtin_display_char);
+  register_builtin(env, "same", builtin_same);
 
   // reject the solution that register raw argv directly into global env
   // the element that `register_argv` registers to its first argument will have
