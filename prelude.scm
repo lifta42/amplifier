@@ -1,26 +1,26 @@
 ; Include some useful misc and act like a standard library
 ; Upgraded from a demo: 13:20, 2017.11.2 by liftA42.
 
-(define cons (lambda (h t) (lambda (f) (f h t))))
-(define car (lambda (c) (c (lambda (h t) h))))
-(define cdr (lambda (c) (c (lambda (h t) t))))
+(define cons (lambda (h t) (lambda (f) (f h t)) ))
+(define car (lambda (c) (c (lambda (h t) h)) ))
+(define cdr (lambda (c) (c (lambda (h t) t)) ))
 
 (define id (lambda (x) x))
 
 ; (quote id '\n') ==> (quote id (<nl>)) ==> (id <nl>) ==> <nl>
-(define newline (lambda () (display-char (quote id '\n'))))
+(define newline (lambda () (display-char (quote id '\n')) ))
 
-(define print-line (lambda (s) (display s) (newline)))
+(define print-line (lambda (s) (display s) (newline) ))
 
-(define list (foldr (lambda (acc item) (cons item acc)) nil))
+(define list (foldr (lambda (acc item) (cons item acc) ) nil) )
 
-(define list-example (list 1 2 3 4))
+(define list-example (list 1 2 3 4) )
 
 (define list-foldr (lambda (f init lst)
   (define iter (lambda (lst)
-    (cond ((nil? lst)
-      init)
-    (else
+    (if (nil? lst) (lambda ()
+      init
+    ) (lambda ()  ; else
       ((lambda (tail-acc)
         (f tail-acc (car lst))
       ) (iter (cdr lst)))
@@ -49,24 +49,21 @@
 ))
 
 (define foldl (lambda (f init)
-  (pipe list (lambda (lst) (list-foldl f init lst)))
+  (pipe list (lambda (lst) (list-foldl f init lst) ) )
 ))
 
 (define quit (pipe list (lambda (lst)
-  (cond ((nil? lst)
-    (exit 0))
-  (else
-    (exit (car lst))))
+  (exit (if (nil? lst) (lambda () 0) (lambda () (car lst)) ))
 )))
 
 (define list-index (lambda (i lst)
-  (cond ((nil? lst)
-    nil)
-  ((= i 0)
-    (car lst))
-  (else
+  (if (nil? lst) (lambda ()
+    nil
+  ) (lambda () (if (= i 0) (lambda ()
+    (car lst)
+  ) (lambda ()
     (list-index (- i 1) (cdr lst))
-  ))
+  ))))
 ))
 
 (define quoted-example (quote list
@@ -81,10 +78,11 @@
 ))
 
 (define list-append (lambda (lst x)
-  (cond ((nil? lst)
-    (cons x nil))
-  (else
-    (cons (car lst) (list-append (cdr lst) x))))
+  (if (nil? lst) (lambda ()
+    (cons x nil)
+  ) (lambda ()
+    (cons (car lst) (list-append (cdr lst) x))
+  ))
 ))
 
 (list-print-string literal-example)

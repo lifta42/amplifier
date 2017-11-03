@@ -207,26 +207,6 @@ struct Element *eval_quote_impl(struct Element *raw, struct Element *join) {
   }
 }
 
-struct Element *eval_cond(struct Element *cond, struct Env *parent) {
-  assert(cond->value.list_value->length >= 2);
-  for (int i = 1; i < cond->value.list_value->length; i++) {
-    struct Element *branch = cond->value.list_value->elements[i];
-    assert(branch->type == TYPE_LIST);
-    assert(branch->value.list_value->length == 2);
-    struct Element *branch_cond = branch->value.list_value->elements[0];
-    if (branch_cond->type == TYPE_NAME &&
-        strcmp(branch_cond->value.name_value, "else") == 0) {
-      return eval(branch->value.list_value->elements[1], parent);
-    }
-    struct Element *condition = eval(branch_cond, parent);
-    assert(condition->type == TYPE_BOOL);
-    if (condition->value.bool_value) {
-      return eval(branch->value.list_value->elements[1], parent);
-    }
-  }
-  return create_element_null();
-}
-
 struct Element *eval_define(struct Element *def, struct Env *parent) {
   assert(def->value.list_value->length == 3);
   struct Element *name = def->value.list_value->elements[1];
@@ -253,8 +233,6 @@ struct Element *eval(struct Element *ele, struct Env *env) {
     if (callable->type == TYPE_NAME) {
       if (strcmp(callable->value.name_value, "lambda") == 0) {
         return eval_lambda(ele, env);
-      } else if (strcmp(callable->value.name_value, "cond") == 0) {
-        return eval_cond(ele, env);
       } else if (strcmp(callable->value.name_value, "define") == 0) {
         return eval_define(ele, env);
       } else if (strcmp(callable->value.name_value, "quote") == 0) {
@@ -692,6 +670,16 @@ struct Element *builtin_same(struct Element **args, int arg_count,
       strcmp(args[0]->value.name_value, args[1]->value.name_value) == 0);
 }
 
+struct Element *builtin_if(struct Element **args, int arg_count,
+                           struct Env *parent) {
+  assert(arg_count == 3);
+  struct Element *cond = args[0], *then = args[1], *other = args[2];
+  assert(cond->type = TYPE_BOOL);
+  assert(then->type == TYPE_LAMBDA || then->type == TYPE_BUILTIN);
+  assert(other->type == TYPE_LAMBDA || other->type == TYPE_BUILTIN);
+  return apply(cond->value.bool_value ? then : other, NULL, 0);
+}
+
 // Part 5: driver
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   struct Element *ele = malloc(sizeof(struct Element));
@@ -741,6 +729,7 @@ int main(int argc, char *argv[]) {
   register_builtin(env, "pipe", builtin_pipe);
   register_builtin(env, "display-char", builtin_display_char);
   register_builtin(env, "same", builtin_same);
+  register_builtin(env, "if", builtin_if);
 
   // reject the solution that register raw argv directly into global env
   // the element that `register_argv` registers to its first argument will have
