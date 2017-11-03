@@ -5,6 +5,11 @@
 (define car (lambda (c) (c (lambda (h t) h))))
 (define cdr (lambda (c) (c (lambda (h t) t))))
 
+(define id (lambda (x) x))
+
+; (quote id '\n') ==> (quote id (<nl>)) ==> (id <nl>) ==> <nl>
+(define newline (lambda () (display-char (quote id '\n'))))
+
 (define print-line (lambda (s) (display s) (newline)))
 
 (define list (foldr (lambda (acc item) (cons item acc)) nil))
@@ -25,8 +30,6 @@
 ))
 
 ; https://stackoverflow.com/questions/6172004/writing-foldl-using-foldr
-(define id (lambda (x) x))
-
 (define list-foldl (lambda (f init lst)
   ((lambda (step)
     ((list-foldr step id lst) init)

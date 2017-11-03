@@ -565,14 +565,6 @@ struct Element *builtin_sub(struct Element **args, int arg_count,
   return ele;
 }
 
-// this is inevitable because there's no `string` or `char` type
-struct Element *builtin_newline(struct Element **args, int arg_count,
-                                struct Env *parent) {
-  assert(arg_count == 0);
-  printf("\n");
-  return create_element_null();
-}
-
 struct Element *builtin_is_nil(struct Element **args, int arg_count,
                                struct Env *parent) {
   assert(arg_count == 1);
@@ -678,7 +670,8 @@ struct Element *builtin_display_char(struct Element **args, int arg_count,
   assert(arg_count == 1);
   assert(args[0]->type == TYPE_INT);
   int code = args[0]->value.int_value;
-  if (code > 255 || !isprint(code)) {
+  // remove `isprint()` testing here, because it fails for '\n'
+  if (code > 255) {
     // this usually happens in the middle of string printing, so insert a line
     // break to prevent corrupting
     // this case does not happen on macOS, since it flushes stdout per line
@@ -725,13 +718,12 @@ int main(int argc, char *argv[]) {
     printf("Please specify entry source file as command line arguement.\n");
     return 0;
   }
+
   struct Env *env = create_env(NULL);
-  register_argv(env, argc, argv);
   register_builtin(env, "+", builtin_add);
   register_builtin(env, "-", builtin_sub);
   register_builtin(env, "*", builtin_mul);
   register_builtin(env, "display", builtin_display);
-  register_builtin(env, "newline", builtin_newline);
   register_builtin(env, "=", builtin_eq);
   register_builtin(env, ">", builtin_gt);
   register_builtin(env, "nil?", builtin_is_nil);
@@ -739,6 +731,9 @@ int main(int argc, char *argv[]) {
   register_builtin(env, "foldr", builtin_foldr);
   register_builtin(env, "pipe", builtin_pipe);
   register_builtin(env, "display-char", builtin_display_char);
+
+  struct Env *argv_env = create_env(NULL);
+  register_argv(argv_env, argc, argv);
 
   char *source = NULL;
   int len = 0;
