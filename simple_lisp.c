@@ -683,6 +683,16 @@ struct Element *builtin_display_char(struct Element **args, int arg_count,
   return create_element_null();
 }
 
+#define ARGV_REGISTERED_NAME "reserved_argv"
+struct Element *builtin_argv(struct Element **args, int arg_count,
+                             struct Env *parent) {
+  assert(arg_count == 1);
+  struct Element *join = args[0];
+  assert(join->type == TYPE_BUILTIN || join->type == TYPE_LAMBDA);
+  struct Element *argv = resolve(ARGV_REGISTERED_NAME, parent);
+  return eval_quote_impl(argv, join);
+}
+
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
@@ -709,7 +719,7 @@ void register_argv(struct Env *env, int argc, char *argv[]) {
     }
     argv_list->value.list_value->elements[i] = ele;
   }
-  register_(env, "argv", argv_list);
+  register_(env, ARGV_REGISTERED_NAME, argv_list);
 }
 
 // Part 5: driver
@@ -732,8 +742,19 @@ int main(int argc, char *argv[]) {
   register_builtin(env, "pipe", builtin_pipe);
   register_builtin(env, "display-char", builtin_display_char);
 
+  // reject the solution that register raw argv directly into global env
+  // the element that `register_argv` registers to its first argument will have
+  // type `TYPE_LIST`, which cannot be manipulated in any way
+  // it is considered really bad by me that there is a boulder in my language's
+  // global scope, so I create a special env beyond the tree and for argv only
   struct Env *argv_env = create_env(NULL);
   register_argv(argv_env, argc, argv);
+  struct Element *argv_builtin = malloc(sizeof(struct Element));
+  argv_builtin->type = TYPE_BUILTIN;
+  argv_builtin->value.builtin_value = malloc(sizeof(struct Builtin));
+  argv_builtin->value.builtin_value->func = builtin_argv;
+  argv_builtin->value.builtin_value->parent = argv_env;
+  register_(env, "argv", argv_builtin);
 
   char *source = NULL;
   int len = 0;

@@ -81,3 +81,5 @@
 ))
 
 (list-print-string literal-example)
+
+(define list-argv (argv list))
