@@ -33,7 +33,7 @@ struct ElementList;
 struct Env;
 
 struct Lambda {
-  char *args[MAX_NAME_LEN];
+  char **args;
   int arg_count;
   struct Env *parent;
   struct ElementList *body;
@@ -210,7 +210,7 @@ struct Element *eval(struct Element *ele, struct Env *env);
 struct Element *apply(struct Element *ele, struct Element **args,
                       int arg_count);
 
-// `lambda`, `cond` and `define` accepts un-evaluated elements as arguments, so
+// `lambda`, `quote` and `define` accepts un-evaluated elements as arguments, so
 // they are not able to be built-ins, only compiler plugins (macros).
 struct Element *eval_lambda(struct Element *lambda, struct Env *parent) {
   assert(lambda->value.list_value->length >= 2);
@@ -218,14 +218,18 @@ struct Element *eval_lambda(struct Element *lambda, struct Env *parent) {
   ele->type = TYPE_LAMBDA;
   ele->value.lambda_value = malloc(sizeof(struct Lambda));
   ele->value.lambda_value->parent = parent;
+
   struct Element *arg_list = lambda->value.list_value->elements[1];
   assert(arg_list->type == TYPE_LIST);
-  ele->value.lambda_value->arg_count = arg_list->value.list_value->length;
-  for (int i = 0; i < ele->value.lambda_value->arg_count; i++) {
+  int arg_count = arg_list->value.list_value->length;
+  ele->value.lambda_value->arg_count = arg_count;
+  ele->value.lambda_value->args = malloc(sizeof(char *) * arg_count);
+  for (int i = 0; i < arg_count; i++) {
     assert(arg_list->value.list_value->elements[i]->type == TYPE_NAME);
     ele->value.lambda_value->args[i] =
         arg_list->value.list_value->elements[i]->value.name_value;
   }
+
   ele->value.lambda_value->body = malloc(sizeof(struct ElementList));
   int body_length = lambda->value.list_value->length - 2;
   ele->value.lambda_value->body->length = body_length;
@@ -320,8 +324,14 @@ struct Element *apply(struct Element *ele, struct Element **args,
   }
   if (ele->type == TYPE_BUILTIN) {
     // built-in does not need its own env, just use its parent's one if exists
-    return ele->value.builtin_value->func(args, arg_count,
-                                          ele->value.builtin_value->parent);
+    struct Element *result = ele->value.builtin_value->func(
+        args, arg_count, ele->value.builtin_value->parent);
+    // TYPE_LIST type value is un-manipulated in this language, unlike the
+    // origin Scheme and LISP. It is a good question that whether I should allow
+    // built-in to return TYPE_LIST value, since it is able to do so. I forbid
+    // it for now because that is trivial.
+    assert(result->type != TYPE_LIST);
+    return result;
   } else {
     assert(ele->value.lambda_value->arg_count == arg_count);
     // lambda has a static var scope, nothing to do with `parent` argument,
@@ -330,8 +340,8 @@ struct Element *apply(struct Element *ele, struct Element **args,
     for (int i = 0; i < ele->value.lambda_value->arg_count; i++) {
       register_(env, ele->value.lambda_value->args[i], args[i]);
     }
-    struct Element *result = malloc(sizeof(struct Element));
-    result->type = TYPE_NULL; // fallback for (lambda (...) )
+    struct Element *result =
+        create_element_null(); // fallback for (lambda (...) )
     for (int i = 0; i < ele->value.lambda_value->body->length; i++) {
       result = eval(ele->value.lambda_value->body->elements[i], env);
     }
@@ -341,6 +351,9 @@ struct Element *apply(struct Element *ele, struct Element **args,
 
 // Part 3: parser
 // notice: create everything here
+// all parse_* functions have following signature, they look at input start from
+// `source[*pos]` and increase `*pos` during parsing, they leave `source[*pos]`
+// to be the first char that they cannot deal with by themselves
 struct Element *parse(char *source, int *pos);
 
 void parse_ignore_space(char *source, int *pos) {
@@ -394,6 +407,9 @@ struct Element *parse_string(char *source, int *pos) {
 
 struct Element *parse_name(char *source, int *pos) {
   // nil is also here
+
+  // now you know why there's limitation about the length of names and lists
+  // I do not do any look-ahead in this parser
   char *name = malloc(sizeof(char) * MAX_NAME_LEN);
   int name_len = 0;
   while (!isspace(source[*pos]) && source[*pos] != '(' && source[*pos] != ')') {
@@ -568,8 +584,7 @@ struct Element *builtin_exit(struct Element **args, int arg_count,
   assert(arg_count == 1);
   assert(args[0]->type == TYPE_INT);
   exit(args[0]->value.int_value);
-  // trivial
-  return create_element_null();
+  return create_element_null(); // trivial
 }
 
 #define FOLDR_CALLBACK_REGISTERED_NAME "reserved_foldr-callback"
@@ -614,6 +629,7 @@ struct Element *builtin_pipe_impl(struct Element **, int, struct Env *);
 struct Element *builtin_pipe(struct Element **args, int arg_count,
                              struct Env *parent) {
   assert(arg_count >= 2);
+  // `func_list` happens to be a list of elements, it cannot be applied
   struct Element *func_list = create_element_list(arg_count);
   for (int i = 0; i < arg_count; i++) {
     assert(args[i]->type == TYPE_LAMBDA || args[i]->type == TYPE_BUILTIN);
@@ -668,11 +684,20 @@ struct Element *builtin_display_char(struct Element **args, int arg_count,
 #define ARGV_REGISTERED_NAME "reserved_argv"
 struct Element *builtin_argv(struct Element **args, int arg_count,
                              struct Env *parent) {
-  assert(arg_count == 1);
-  struct Element *join = args[0];
-  assert(join->type == TYPE_BUILTIN || join->type == TYPE_LAMBDA);
+  assert(arg_count == 2);
+  struct Element *join_outer = args[0], *join_inner = args[1];
+  assert(join_outer->type == TYPE_BUILTIN || join_outer->type == TYPE_LAMBDA);
+  assert(join_inner->type == TYPE_BUILTIN || join_inner->type == TYPE_LAMBDA);
   struct Element *argv = resolve(ARGV_REGISTERED_NAME, parent);
-  return eval_quote_impl(argv, join);
+  int argv_count = argv->value.list_value->length;
+  struct Element **argv_list = malloc(sizeof(struct Element) * argv_count);
+  for (int i = 0; i < argv_count; i++) {
+    // maybe a bad code reuse example
+    argv_list[i] =
+        eval_quote_impl(argv->value.list_value->elements[i], join_inner);
+  }
+  // maybe a bad code not-reuse example
+  return apply(join_outer, argv_list, arg_count);
 }
 
 struct Element *builtin_same(struct Element **args, int arg_count,
@@ -694,13 +719,18 @@ struct Element *builtin_if(struct Element **args, int arg_count,
 }
 
 // Part 5: driver
-void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
+void register_builtin_with_env(struct Env *env, char *name, BuiltinFunc builtin,
+                               struct Env *with_env) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BUILTIN;
   ele->value.builtin_value = malloc(sizeof(struct Builtin));
   ele->value.builtin_value->func = builtin;
-  ele->value.builtin_value->parent = NULL; // so sad it does not have parent
+  ele->value.builtin_value->parent = with_env;
   register_(env, name, ele);
+}
+
+void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
+  register_builtin_with_env(env, name, builtin, NULL);
 }
 
 void register_argv(struct Env *env, int argc, char *argv[]) {
@@ -741,12 +771,7 @@ int main(int argc, char *argv[]) {
   // global scope, so I create a special env beyond the tree and for argv only
   struct Env *argv_env = create_env(NULL);
   register_argv(argv_env, argc, argv);
-  struct Element *argv_builtin = malloc(sizeof(struct Element));
-  argv_builtin->type = TYPE_BUILTIN;
-  argv_builtin->value.builtin_value = malloc(sizeof(struct Builtin));
-  argv_builtin->value.builtin_value->func = builtin_argv;
-  argv_builtin->value.builtin_value->parent = argv_env;
-  register_(env, "argv", argv_builtin);
+  register_builtin_with_env(env, "argv", builtin_argv, argv_env);
 
   char *source = NULL;
   int len = 0;

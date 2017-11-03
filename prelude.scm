@@ -16,7 +16,11 @@
 
 (define print-line (lambda (s) (display s) (newline) ))
 
-(define list (foldr (lambda (acc item) (cons item acc) ) nil) )
+(define flip (lambda (func)
+  (lambda (a b) (func b a))
+))
+
+(define list (foldr (flip cons) nil) )
 
 (define list-example (list 1 2 3 4) )
 
@@ -41,7 +45,7 @@
 ))
 
 (define list-reverse (lambda (lst)
-  (list-foldl cons nil lst)
+  (list-foldl (flip cons) nil lst)
 ))
 
 ; cannot use `list-foldr` directly, because eval order must be from left to
@@ -106,7 +110,9 @@
   (newline)
 ))
 
-(define list-argv (argv list-quoter))
+(define list-argv (argv list list-quoter))
+
+(list-print-string (list-index 1 list-argv))
 
 (define list-concat (lambda (dst src)
   (if (nil? dst) (lambda ()
@@ -120,4 +126,10 @@
   (quote list-quoter 'Hello, liftA42!\nHello, liftA42!\nHello, liftA42!')
 )
 
-(list-print-string (car list-argv))
+(define square-sum (pipe
+  list
+  (lambda (lst) (list-map (lambda (x) (* x x)) lst))
+  (lambda (lst) (list-foldr + 0 lst))
+))
+
+(print-line (square-sum 3 4 5 6))
