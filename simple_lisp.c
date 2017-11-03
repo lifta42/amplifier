@@ -76,7 +76,9 @@ struct Element *create_element_list(int length) {
   ele->type = TYPE_LIST;
   ele->value.list_value = malloc(sizeof(struct ElementList));
   ele->value.list_value->length = length;
-  ele->value.list_value->elements = malloc(sizeof(struct Element *) * length);
+  if (length > 0) {
+    ele->value.list_value->elements = malloc(sizeof(struct Element *) * length);
+  }
   return ele;
 }
 
@@ -95,6 +97,60 @@ struct Element *create_element_bool(int value) {
 }
 
 // rarely create lambda, built-in and name, so no util for them
+
+// this guy has a weird interface because its usage: for source code and for
+// command line arguments
+struct Element *create_string_literal(char *source, int *pos, char until,
+                                      int escaped) {
+  struct Element **char_seq = malloc(sizeof(struct Element *) * LIST_MAX_SIZE);
+  int char_count = 0;
+  while (source[*pos] != until) {
+    if (char_count == LIST_MAX_SIZE - 1) { // next writing will fill this list
+      // perfect code shape is more important than tail recursive
+      struct Element *rest = create_string_literal(source, pos, until, escaped);
+      struct Element *pack = create_element_list(LIST_MAX_SIZE);
+      for (int i = 0; i < LIST_MAX_SIZE - 1; i++) {
+        pack->value.list_value->elements[i] = char_seq[i];
+      }
+      pack->value.list_value->elements[LIST_MAX_SIZE - 1] = rest;
+      return pack;
+    }
+
+    char c = source[*pos];
+    if (!escaped && c == '\\') {
+      (*pos)++;
+      switch (source[*pos]) {
+      case 'n':
+        c = '\n';
+        break;
+      case 't':
+        c = '\t';
+        break;
+      case '\'':
+        c = '\'';
+        break;
+      case '\\':
+        c = '\\';
+        break;
+      default:
+        fprintf(stderr, "escape sequence \"\\%c\" is not recognizable\n",
+                source[*pos]);
+        exit(PARSE_ERROR); // awkward... just keep
+      }
+    }
+    char_seq[char_count] = create_element_int((int)c);
+    char_count++;
+    (*pos)++;
+  }
+  assert(char_count < LIST_MAX_SIZE); // there must be space for one more child
+  struct Element *pack = create_element_list(char_count + 1);
+  for (int i = 0; i < char_count; i++) {
+    pack->value.list_value->elements[i] = char_seq[i];
+  }
+  // end of string symbol
+  pack->value.list_value->elements[char_count] = create_element_null();
+  return pack;
+}
 
 struct EnvPair {
   char *name;
@@ -314,68 +370,25 @@ struct Element *parse_number(char *source, int *pos) {
     n = n * 10 + (source[*pos] - '0');
     (*pos)++;
   }
+  if (!isspace(source[*pos]) && source[*pos] != '(' && source[*pos] != ')') {
+    fprintf(stderr, "name is not allowed to start with digit: \"%d%c...\"\n", n,
+            source[*pos]);
+    exit(PARSE_ERROR);
+  }
   return create_element_int(n);
 }
 
 struct Element *parse_string(char *source, int *pos) {
-  // (car (quote list 'foo')) ==> (car (quote list (102 111 111))) ==>
+  // (car (list-quoter list 'foo')) ==>
+  // (car (list-quoter list (102 111 111 nil))) ==>
   // (car (cons 102 (cons 111 (cons 111 nil)))) ==> 102
-  // it must appear inside of `(quote some-join <here>)`, or calling
-  // un-callable var (`102` above) exception would be raised
-  // use single quotation mark so that `"` can appear without backslash
-  // notice: only take effect when following a space, so `fac'` and
-  // `six-o'clock` will be normal names
-  (*pos)++;
-  struct Element **char_seq = malloc(sizeof(struct Element *) * LIST_MAX_SIZE);
-  int char_count = 0;
-  while (source[*pos] != '\'') {
-    char c = source[*pos];
-    if (c == '\\') {
-      (*pos)++;
-      switch (source[*pos]) {
-      case 'n':
-        c = '\n';
-        break;
-      case 't':
-        c = '\t';
-        break;
-      case '\'':
-        c = '\'';
-        break;
-      case '\\':
-        c = '\\';
-        break;
-      default:
-        fprintf(stderr, "escape sequence \"\\%c\" is not recognizable\n",
-                source[*pos]);
-        exit(PARSE_ERROR);
-      }
-    }
-    if (char_count == LIST_MAX_SIZE - 1) {
-      // nothing else uses stack, so neither does this even stack is usable
-      // same to `free()`
-      char *literal = malloc(sizeof(char) * LIST_MAX_SIZE);
-      for (int i = 0; i < LIST_MAX_SIZE - 1; i++) {
-        literal[i] = (char)char_seq[i]->value.int_value;
-      }
-      literal[LIST_MAX_SIZE - 1] = '\0';
-      fprintf(stderr,
-              "string literal \"%s...\" exceed list length limitation\n",
-              literal);
-      exit(PARSE_ERROR);
-    }
-    struct Element *ele = malloc(sizeof(struct Element));
-    ele->type = TYPE_INT;
-    ele->value.int_value = (int)c;
-    char_seq[char_count] = ele;
-    char_count++;
-    (*pos)++;
-  }
-  (*pos)++; // for ending quotes
-  struct Element *ele = create_element_list(char_count);
-  for (int i = 0; i < char_count; i++) {
-    ele->value.list_value->elements[i] = char_seq[i];
-  }
+  // it must appear inside of `(quote some-join <here>)`, or calling un-callable
+  // var (`102` above) exception would be raised use single quotation mark so
+  // that `"` can appear without backslash notice: only take effect when
+  // following a space, so `fac'` and `six-o'clock` will be normal names
+  (*pos)++; // starting quotes
+  struct Element *ele = create_string_literal(source, pos, '\'', 0);
+  (*pos)++; // ending quotes
   return ele;
 }
 
@@ -693,19 +706,9 @@ void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
 void register_argv(struct Env *env, int argc, char *argv[]) {
   struct Element *argv_list = create_element_list(argc);
   for (int i = 0; i < argc; i++) {
-    int argv_len = strlen(argv[i]);
-    if (argv_len > LIST_MAX_SIZE) {
-      fprintf(stderr, "warning: argv \"%s\" is too long and will be cropped\n",
-              argv[i]);
-      argv_len = LIST_MAX_SIZE;
-    }
-    struct Element *ele = create_element_list(argv_len);
-    for (int j = 0; j < argv_len; j++) {
-      ele->value.list_value->elements[j] = malloc(sizeof(struct Element));
-      ele->value.list_value->elements[j]->type = TYPE_INT;
-      ele->value.list_value->elements[j]->value.int_value = (int)argv[i][j];
-    }
-    argv_list->value.list_value->elements[i] = ele;
+    int trivial_pos = 0;
+    argv_list->value.list_value->elements[i] =
+        create_string_literal(argv[i], &trivial_pos, '\0', 1);
   }
   register_(env, ARGV_REGISTERED_NAME, argv_list);
 }

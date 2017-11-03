@@ -7,8 +7,12 @@
 
 (define id (lambda (x) x))
 
-; (quote id '\n') ==> (quote id (<nl>)) ==> (id <nl>) ==> <nl>
-(define newline (lambda () (display-char (quote id '\n')) ))
+(define sum (foldr + 0))
+
+; (quote cons '\n') ==> (quote cons (<nl> nil)) ==> (cons <nl> nil)
+(define newline (lambda ()
+  (display-char (car (quote cons '\n')))
+))
 
 (define print-line (lambda (s) (display s) (newline) ))
 
@@ -67,14 +71,8 @@
 ))
 
 (define quoted-example (quote list
-  (this is an (quote list example list and) (the (number is) 42.))
-))
-
-(define literal-example (quote list 'Hello, liftA42!'))
-
-(define list-print-string (lambda (str)
-  (list-map display-char str)
-  (newline)
+  ; notice: `(quote list example list and)` is illegal if not quoted
+  (this is an (quote list example list and) (the (number is) forty-two.))
 ))
 
 (define list-append (lambda (lst x)
@@ -85,6 +83,41 @@
   ))
 ))
 
-(list-print-string literal-example)
+(define true (= 42 42))
+(define false (> 42 42))
 
-(define list-argv (argv list))
+(define list-quoter (foldr
+  (lambda (acc item)
+    (if (nil? acc) (lambda ()
+      (list item)
+    ) (lambda () (if (= (car acc) 0) (lambda ()
+      item
+    ) (lambda ()
+      (cons item acc)
+    ))))
+  )
+  (list 0)
+))
+
+(define literal-example (quote list-quoter 'Hello, liftA42!'))
+
+(define list-print-string (lambda (str)
+  (list-map display-char str)
+  (newline)
+))
+
+(define list-argv (argv list-quoter))
+
+(define list-concat (lambda (dst src)
+  (if (nil? dst) (lambda ()
+    src
+  ) (lambda ()
+    (cons (car dst) (list-concat (cdr dst) src))
+  ))
+))
+
+(define long-literal-example
+  (quote list-quoter 'Hello, liftA42!\nHello, liftA42!\nHello, liftA42!')
+)
+
+(list-print-string (car list-argv))
