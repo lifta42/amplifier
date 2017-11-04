@@ -152,6 +152,35 @@ struct Element *create_string_literal(char *source, int *pos, char until,
   return pack;
 }
 
+char *unpack_string_literal(struct Element *literal, int *str_length) {
+  int expect_length = literal->value.list_value->length;
+  // no need to + 1, because there is a end-of-string symbol counted
+  char *str = malloc(sizeof(char) * expect_length);
+  struct Element *pack = literal;
+  int ele_pos = 0;
+  *str_length = 0;
+  while (1) {
+    struct Element *ele = pack->value.list_value->elements[ele_pos];
+    if (ele->type == TYPE_LIST) {
+      expect_length += ele->value.list_value->length - 1;
+      str = realloc(str, sizeof(char) * expect_length);
+      pack = ele;
+      ele_pos = 0;
+    } else if (ele->type == TYPE_NULL) {
+      str[*str_length] = '\0';
+      break;
+    } else {
+      str[*str_length] = (char)ele->value.int_value;
+      (*str_length)++;
+      // `nil` is counted in `expect_length`
+      assert(*str_length < expect_length);
+      ele_pos++;
+      assert(ele_pos < MAX_NAME_LEN); // or it should not go into this branch
+    }
+  }
+  return str;
+}
+
 struct EnvPair {
   char *name;
   struct Element *value;
@@ -718,6 +747,69 @@ struct Element *builtin_if(struct Element **args, int arg_count,
   return apply(cond->value.bool_value ? then : other, NULL, 0);
 }
 
+void register_all_orphan_builtin(struct Env *env);
+void register_all_argv_related_builtin(struct Env *env, struct Env *argv_env);
+void register_argv(struct Env *env, int argc, char *argv[]);
+char *read_file(char *name, int *len);
+void parse_eval(char *source, struct Env *env, int len);
+// this is a built-in that actually works as a small driver, so it shared lots
+// of driver components
+struct Element *builtin_with(struct Element **args, int arg_count,
+                             struct Env *parent) {
+  assert(arg_count == 2);
+  struct Element *module_name = args[0], *callback = args[1];
+  assert(module_name->type == TYPE_NAME);
+  assert(callback->type == TYPE_LAMBDA || callback->type == TYPE_BUILTIN);
+
+  char *relative_name = module_name->value.name_value;
+  struct Element *argv_0 =
+      resolve(ARGV_REGISTERED_NAME, parent)->value.list_value->elements[0];
+  int str_len = 0;
+  char *file_name = unpack_string_literal(argv_0, &str_len);
+
+  // `some-dir/a.out` ==> `some-dir/` `a.out`
+  char *split = strrchr(file_name, '/');
+  if (split == NULL) {
+    file_name[0] = '\0';
+  } else {
+    *(split + 1) = '\0';
+  }
+  file_name =
+      realloc(file_name, sizeof(char) * (strlen(file_name) +
+                                         strlen(relative_name) + 4 + 1));
+  strcat(file_name, relative_name);
+  strcat(file_name, ".scm");
+
+  int source_len = 0;
+  char *source = read_file(file_name, &source_len);
+
+  // for foreign module, it should not determine it is imported or evaluated
+  // directly from command line argument, so create a global env for it
+  struct Env *env = create_env(NULL);
+  register_all_orphan_builtin(env);
+
+  struct Env *argv_env = create_env(NULL);
+  // fake argv for more `with` in foreign module
+  register_argv(argv_env, 1, &file_name);
+  register_all_argv_related_builtin(env, argv_env);
+
+  parse_eval(source, env, source_len);
+  // now everything important in foreign module is registered into `env`
+
+  // here, we make `env` a invisible layer between callback's will-be-created
+  // env and its parent, to insert everything we got from foreign module
+  if (callback->type == TYPE_LAMBDA) {
+    env->parent = callback->value.lambda_value->parent;
+    callback->value.lambda_value->parent = env;
+  } else {
+    // a little missing duck type
+    env->parent = callback->value.builtin_value->parent;
+    callback->value.builtin_value->parent = env;
+  }
+
+  return apply(callback, NULL, 0);
+}
+
 // Part 5: driver
 void register_builtin_with_env(struct Env *env, char *name, BuiltinFunc builtin,
                                struct Env *with_env) {
@@ -733,23 +825,7 @@ void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
   register_builtin_with_env(env, name, builtin, NULL);
 }
 
-void register_argv(struct Env *env, int argc, char *argv[]) {
-  struct Element *argv_list = create_element_list(argc);
-  for (int i = 0; i < argc; i++) {
-    int trivial_pos = 0;
-    argv_list->value.list_value->elements[i] =
-        create_string_literal(argv[i], &trivial_pos, '\0', 1);
-  }
-  register_(env, ARGV_REGISTERED_NAME, argv_list);
-}
-
-int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    printf("Please specify entry source file as command line arguement.\n");
-    return 0;
-  }
-
-  struct Env *env = create_env(NULL);
+void register_all_orphan_builtin(struct Env *env) {
   register_builtin(env, "+", builtin_add);
   register_builtin(env, "-", builtin_sub);
   register_builtin(env, "*", builtin_mul);
@@ -763,22 +839,30 @@ int main(int argc, char *argv[]) {
   register_builtin(env, "display-char", builtin_display_char);
   register_builtin(env, "same", builtin_same);
   register_builtin(env, "if", builtin_if);
+}
 
-  // reject the solution that register raw argv directly into global env
-  // the element that `register_argv` registers to its first argument will have
-  // type `TYPE_LIST`, which cannot be manipulated in any way
-  // it is considered really bad by me that there is a boulder in my language's
-  // global scope, so I create a special env beyond the tree and for argv only
-  struct Env *argv_env = create_env(NULL);
-  register_argv(argv_env, argc, argv);
+void register_all_argv_related_builtin(struct Env *env, struct Env *argv_env) {
   register_builtin_with_env(env, "argv", builtin_argv, argv_env);
+  register_builtin_with_env(env, "with", builtin_with, argv_env);
+}
 
+void register_argv(struct Env *env, int argc, char *argv[]) {
+  struct Element *argv_list = create_element_list(argc);
+  for (int i = 0; i < argc; i++) {
+    int trivial_pos = 0;
+    argv_list->value.list_value->elements[i] =
+        create_string_literal(argv[i], &trivial_pos, '\0', 1);
+  }
+  register_(env, ARGV_REGISTERED_NAME, argv_list);
+}
+
+char *read_file(char *name, int *len) {
   char *source = NULL;
-  int len = 0;
+  *len = 0;
   // read whole file into `source`
-  FILE *file = fopen(argv[1], "r");
+  FILE *file = fopen(name, "r");
   if (file == NULL) {
-    fprintf(stderr, "can not open file \"%s\"\n", argv[1]);
+    fprintf(stderr, "can not open file \"%s\"\n", name);
     exit(PRE_PARSE_ERROR);
   }
   while (1) {
@@ -791,13 +875,16 @@ int main(int argc, char *argv[]) {
     if (source == NULL) {
       source = line;
     } else {
-      source = realloc(source, sizeof(char) * (len + line_len + 1));
+      source = realloc(source, sizeof(char) * (*len + line_len + 1));
       strcat(source, line);
     }
-    len += line_len;
+    *len += line_len;
   }
   fclose(file);
+  return source;
+}
 
+void parse_eval(char *source, struct Env *env, int len) {
   int pos = 0;
   while (pos != len) {
     struct Element *root = parse(source, &pos);
@@ -805,4 +892,28 @@ int main(int argc, char *argv[]) {
       eval(root, env);
     }
   }
+}
+
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    printf("Please specify entry source file as command line arguement.\n");
+    return 0;
+  }
+
+  struct Env *env = create_env(NULL);
+  register_all_orphan_builtin(env);
+
+  // reject the solution that register raw argv directly into global env
+  // the element that `register_argv` registers to its first argument will have
+  // type `TYPE_LIST`, which cannot be manipulated in any way
+  // it is considered really bad by me that there is a boulder in my language's
+  // global scope, so I create a special env beyond the tree and for argv only
+  struct Env *argv_env = create_env(NULL);
+  register_argv(argv_env, argc, argv);
+  register_all_argv_related_builtin(env, argv_env);
+
+  int len = 0;
+  char *source = read_file(argv[1], &len);
+
+  parse_eval(source, env, len);
 }

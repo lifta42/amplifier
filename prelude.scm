@@ -112,8 +112,6 @@
 
 (define list-argv (argv list list-quoter))
 
-(list-print-string (list-index 1 list-argv))
-
 (define list-concat (lambda (dst src)
   (if (nil? dst) (lambda ()
     src
@@ -126,10 +124,10 @@
   (quote list-quoter 'Hello, liftA42!\nHello, liftA42!\nHello, liftA42!')
 )
 
-(define square-sum (pipe
-  list
-  (lambda (lst) (list-map (lambda (x) (* x x)) lst))
-  (lambda (lst) (list-foldr + 0 lst))
+(with (quote id test) (lambda ()
+  (print-line the-number)
+  (print-line (add-the-number 1))
+  (define local-add-the-number (lambda (y) (+ y the-number)))
+  (print-line (local-add-the-number 2))
+  (print-line the-name-in-test)
 ))
-
-(print-line (square-sum 3 4 5 6))
