@@ -9,6 +9,7 @@
 #define MAX_NAME_LEN 32
 #define ENV_INIT_SIZE 8
 #define LIST_MAX_SIZE 32
+#define MAX_OPEN_FILE 8 // including stdin and stdout
 
 #define DISPLAY_LIST_MAX_ITEM 3
 
@@ -98,6 +99,13 @@ struct Element *create_element_bool(int value) {
 
 // rarely create lambda, built-in and name, so no util for them
 
+// the following two couples are actually workaround for a fact, that there's
+// nothing other than the seven basic types in this language
+// I cannot make an array of int, a pointer to int, or a function that takes an
+// int as an argument, just like what I can do in C
+// thus, at the time I must store something other than those basic types, I have
+// to use the TYPE_LIST in a way that it will not be expected to be used
+
 // this guy has a weird interface because its usage: for source code and for
 // command line arguments
 struct Element *create_string_literal(char *source, int *pos, char until,
@@ -159,6 +167,8 @@ char *unpack_string_literal(struct Element *literal, int *str_length) {
   struct Element *pack = literal;
   int ele_pos = 0;
   *str_length = 0;
+  // there is a chance to write this in recursive style, but I prefer not to
+  // use `strcat`
   while (1) {
     struct Element *ele = pack->value.list_value->elements[ele_pos];
     if (ele->type == TYPE_LIST) {
@@ -179,6 +189,29 @@ char *unpack_string_literal(struct Element *literal, int *str_length) {
     }
   }
   return str;
+}
+
+struct Element *create_pointer(void *ptr) {
+  struct Element *ele = create_element_list(sizeof(void *));
+  // https://www.securecoding.cert.org/confluence/display/c/INT36-C.+Converting+a+pointer+to+integer+or+integer+to+pointer
+  uintptr_t p = (uintptr_t)ptr;
+  for (int i = 0; i < ele->value.list_value->length; i++) {
+    ele->value.list_value->elements[i] = create_element_int(p & 0xff);
+    p >>= 8;
+  }
+  assert(p == 0x0);
+  return ele;
+}
+
+void *unpack_pointer(struct Element *ele) {
+  uintptr_t p = 0x0;
+  for (int i = ele->value.list_value->length - 1; i >= 0; i--) {
+    p |= (unsigned)ele->value.list_value->elements[i]->value.int_value;
+    if (i != 0) {
+      p <<= 8;
+    }
+  }
+  return (void *)p;
 }
 
 struct EnvPair {
@@ -530,8 +563,8 @@ struct Element *builtin_add(struct Element **args, int arg_count,
                             args[1]->value.int_value);
 }
 
-struct Element *builtin_display(struct Element **args, int arg_count,
-                                struct Env *parent) {
+struct Element *builtin_debug(struct Element **args, int arg_count,
+                              struct Env *parent) {
   assert(arg_count == 1);
   switch (args[0]->type) {
   case TYPE_INT:
@@ -558,10 +591,30 @@ struct Element *builtin_display(struct Element **args, int arg_count,
     }
     printf(")>");
     break;
-  case TYPE_LIST:
+  case TYPE_LIST: {
     // it is impossible that a internal list becomes evaled argument
-    assert(0);
+    // however, this is a util for debugging, so anything is possible
+    printf("(");
+    int item_count = args[0]->value.list_value->length;
+    if (item_count > DISPLAY_LIST_MAX_ITEM) {
+      item_count = DISPLAY_LIST_MAX_ITEM;
+    }
+    char *prefix = "";
+    for (int i = 0; i < item_count; i++) {
+      printf("%s", prefix);
+      if (args[0]->value.list_value->elements[i]->type != TYPE_LIST) {
+        builtin_debug(&args[0]->value.list_value->elements[i], 1, parent);
+      } else {
+        printf("(...)");
+      }
+      prefix = " ";
+    }
+    if (args[0]->value.list_value->length > item_count) {
+      printf("%s...", prefix);
+    }
+    printf(")");
     break;
+  }
   }
   return create_element_null();
 }
@@ -692,24 +745,6 @@ struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
   return current_args[0];
 }
 
-struct Element *builtin_display_char(struct Element **args, int arg_count,
-                                     struct Env *parent) {
-  assert(arg_count == 1);
-  assert(args[0]->type == TYPE_INT);
-  int code = args[0]->value.int_value;
-  // remove `isprint()` testing here, because it fails for '\n'
-  if (code > 255) {
-    // this usually happens in the middle of string printing, so insert a line
-    // break to prevent corrupting
-    // this case does not happen on macOS, since it flushes stdout per line
-    fprintf(stderr, "\nattempt to display out-of-range char: %d\n", code);
-    exit(RUNTIME_ERROR);
-  } else {
-    printf("%c", (char)code);
-  }
-  return create_element_null();
-}
-
 #define ARGV_REGISTERED_NAME "reserved_argv"
 struct Element *builtin_argv(struct Element **args, int arg_count,
                              struct Env *parent) {
@@ -747,8 +782,39 @@ struct Element *builtin_if(struct Element **args, int arg_count,
   return apply(cond->value.bool_value ? then : other, NULL, 0);
 }
 
+struct Element *builtin_write(struct Element **args, int arg_count,
+                              struct Env *parent) {
+  assert(arg_count == 2);
+  struct Element *file_no = args[0], *output = args[1];
+  assert(file_no->type == TYPE_INT);
+  assert(output->type == TYPE_INT);
+
+  int file_desc = file_no->value.int_value;
+  struct Element *file_table = resolve("_file_table", parent);
+  struct Element *file_info = file_table->value.list_value->elements[file_desc];
+  if (file_info->type == TYPE_NULL) {
+    fprintf(stderr, "file descriptor %d does not related to a valid file\n",
+            file_desc);
+    exit(RUNTIME_ERROR);
+  }
+  struct Element *permission = file_info->value.list_value->elements[0];
+  struct Element *file_ptr = file_info->value.list_value->elements[1];
+  if (strstr(permission->value.name_value, "w") == NULL) {
+    fprintf(stderr, "do not have permission to write file %d\n", file_desc);
+    exit(RUNTIME_ERROR);
+  }
+  FILE *file = unpack_pointer(file_ptr);
+  int code = output->value.int_value;
+  if (code < 0x0 || code > 0xff) {
+    fprintf(stderr, "output char %d is out of range\n", code);
+    exit(RUNTIME_ERROR);
+  }
+  fputc((char)code, file);
+  return create_element_null();
+}
+
 void register_all_orphan_builtin(struct Env *env);
-void register_all_argv_related_builtin(struct Env *env, struct Env *argv_env);
+void register_all_related_builtin(struct Env *env, struct Env *with_env);
 void register_argv(struct Env *env, int argc, char *argv[]);
 char *read_file(char *name, int *len);
 void parse_eval(char *source, struct Env *env, int len);
@@ -791,7 +857,7 @@ struct Element *builtin_with(struct Element **args, int arg_count,
   struct Env *argv_env = create_env(NULL);
   // fake argv for more `with` in foreign module
   register_argv(argv_env, 1, &file_name);
-  register_all_argv_related_builtin(env, argv_env);
+  register_all_related_builtin(env, argv_env);
 
   parse_eval(source, env, source_len);
   // now everything important in foreign module is registered into `env`
@@ -829,21 +895,20 @@ void register_all_orphan_builtin(struct Env *env) {
   register_builtin(env, "+", builtin_add);
   register_builtin(env, "-", builtin_sub);
   register_builtin(env, "*", builtin_mul);
-  register_builtin(env, "display", builtin_display);
+  register_builtin(env, "debug", builtin_debug);
   register_builtin(env, "=", builtin_eq);
   register_builtin(env, ">", builtin_gt);
   register_builtin(env, "nil?", builtin_is_nil);
   register_builtin(env, "exit", builtin_exit);
   register_builtin(env, "foldr", builtin_foldr);
   register_builtin(env, "pipe", builtin_pipe);
-  register_builtin(env, "display-char", builtin_display_char);
   register_builtin(env, "same", builtin_same);
   register_builtin(env, "if", builtin_if);
 }
 
-void register_all_argv_related_builtin(struct Env *env, struct Env *argv_env) {
-  register_builtin_with_env(env, "argv", builtin_argv, argv_env);
-  register_builtin_with_env(env, "with", builtin_with, argv_env);
+void register_all_related_builtin(struct Env *env, struct Env *with_env) {
+  register_builtin_with_env(env, "argv", builtin_argv, with_env);
+  register_builtin_with_env(env, "with", builtin_with, with_env);
 }
 
 void register_argv(struct Env *env, int argc, char *argv[]) {
@@ -894,7 +959,42 @@ void parse_eval(char *source, struct Env *env, int len) {
   }
 }
 
+struct Env *init_file_env() {
+  struct Element *file_stdin = create_element_list(2);
+  file_stdin->value.list_value->elements[0] = malloc(sizeof(struct Element));
+  file_stdin->value.list_value->elements[0]->type = TYPE_NAME;
+  file_stdin->value.list_value->elements[0]->value.name_value = "r";
+  file_stdin->value.list_value->elements[1] = create_pointer(stdin);
+  struct Element *file_stdout = create_element_list(2);
+  file_stdout->value.list_value->elements[0] = malloc(sizeof(struct Element));
+  file_stdout->value.list_value->elements[0]->type = TYPE_NAME;
+  file_stdout->value.list_value->elements[0]->value.name_value = "w";
+  file_stdout->value.list_value->elements[1] = create_pointer(stdout);
+  struct Element *file_table = create_element_list(MAX_OPEN_FILE);
+  file_table->value.list_value->elements[0] = file_stdin;
+  file_table->value.list_value->elements[1] = file_stdout;
+  for (int i = 2; i < MAX_OPEN_FILE; i++) {
+    file_table->value.list_value->elements[i] = create_element_null();
+  }
+  struct Env *file_env = create_env(NULL);
+  register_(file_env, "_file_table", file_table);
+  return file_env;
+}
+
 int main(int argc, char *argv[]) {
+  struct Element *test_list = create_element_list(4);
+  test_list->value.list_value->elements[0] = create_element_int(42);
+  test_list->value.list_value->elements[1] = create_element_bool(1);
+  test_list->value.list_value->elements[2] = create_element_list(0);
+  test_list->value.list_value->elements[3] = create_element_null();
+  struct Element *bi = malloc(sizeof(struct Element));
+  bi->type = TYPE_BUILTIN;
+  bi->value.builtin_value = malloc(sizeof(struct Builtin));
+  bi->value.builtin_value->parent = NULL;
+  bi->value.builtin_value->func = builtin_debug;
+  apply(bi, &test_list, 1);
+  printf("\n");
+
   if (argc < 2) {
     printf("Please specify entry source file as command line arguement.\n");
     return 0;
@@ -910,7 +1010,9 @@ int main(int argc, char *argv[]) {
   // global scope, so I create a special env beyond the tree and for argv only
   struct Env *argv_env = create_env(NULL);
   register_argv(argv_env, argc, argv);
-  register_all_argv_related_builtin(env, argv_env);
+  register_all_related_builtin(env, argv_env);
+  struct Env *file_env = init_file_env();
+  register_builtin_with_env(env, "write", builtin_write, file_env);
 
   int len = 0;
   char *source = read_file(argv[1], &len);

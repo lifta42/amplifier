@@ -11,10 +11,8 @@
 
 ; (quote cons '\n') ==> (quote cons (<nl> nil)) ==> (cons <nl> nil)
 (define newline (lambda ()
-  (display-char (car (quote cons '\n')))
+  (write 1 (car (quote cons '\n')))
 ))
-
-(define print-line (lambda (s) (display s) (newline) ))
 
 (define flip (lambda (func)
   (lambda (a b) (func b a))
@@ -106,9 +104,11 @@
 (define literal-example (quote list-quoter 'Hello, liftA42!'))
 
 (define list-print-string (lambda (str)
-  (list-map display-char str)
+  (list-map (lambda (c) (write 1 c)) str)
   (newline)
 ))
+
+(list-print-string literal-example)
 
 (define list-argv (argv list list-quoter))
 
@@ -124,10 +124,4 @@
   (quote list-quoter 'Hello, liftA42!\nHello, liftA42!\nHello, liftA42!')
 )
 
-(with (quote id test) (lambda ()
-  (print-line the-number)
-  (print-line (add-the-number 1))
-  (define local-add-the-number (lambda (y) (+ y the-number)))
-  (print-line (local-add-the-number 2))
-  (print-line the-name-in-test)
-))
+(debug long-literal-example)
