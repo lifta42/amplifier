@@ -713,25 +713,21 @@ struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
   return current_args[0];
 }
 
+struct ArgV {
+  int argc;
+  struct Element **argv;
+};
+
 #define ARGV_REGISTERED_NAME "reserved_argv"
 // `cont` postfix stands for continuation-passing-style
-// struct Element *builtin_argv_cont(struct Element **args, int arg_count,
-//                                   struct Env *parent) {
-//   assert(arg_count == 2);
-//   struct Element *join_outer = args[0], *join_inner = args[1];
-//   assert(join_outer->type == TYPE_BUILTIN || join_outer->type ==
-//   TYPE_LAMBDA); assert(join_inner->type == TYPE_BUILTIN || join_inner->type
-//   == TYPE_LAMBDA); struct Element *argv = resolve(ARGV_REGISTERED_NAME,
-//   parent); int argv_count = argv->value.list_value->length; struct Element
-//   **argv_list = malloc(sizeof(struct Element) * argv_count); for (int i = 0;
-//   i < argv_count; i++) {
-//     // maybe a bad code reuse example
-//     argv_list[i] =
-//         eval_quote_impl(argv->value.list_value->elements[i], join_inner);
-//   }
-//   // maybe a bad code not-reuse example
-//   return apply(join_outer, argv_list, arg_count);
-// }
+struct Element *builtin_argv_cont(struct Element **args, int arg_count,
+                                  struct Builtin *self) {
+  assert(arg_count == 1);
+  struct Element *join = args[0];
+  assert(join->type == TYPE_BUILTIN || join->type == TYPE_LAMBDA);
+  struct ArgV *argv = self->foreign;
+  return apply(join, argv->argv, argv->argc);
+}
 
 struct Element *builtin_same(struct Element **args, int arg_count,
                              struct Builtin *self) {
@@ -855,14 +851,15 @@ void register_all_orphan_builtin(struct Env *env) {
   register_builtin(env, "if", builtin_if);
 }
 
-void register_argv(struct Env *env, int argc, char *argv[]) {
-  struct Element *argv_list = create_element_list(argc);
+struct ArgV *init_argv(int argc, char *argv[]) {
+  struct ArgV *arg_v = malloc(sizeof(struct ArgV));
+  arg_v->argc = argc;
+  arg_v->argv = malloc(sizeof(struct Element *) * argc);
   for (int i = 0; i < argc; i++) {
     int trivial_pos = 0;
-    argv_list->value.list_value->elements[i] =
-        create_string_literal(argv[i], &trivial_pos, '\0', 1);
+    arg_v->argv[i] = create_string_literal(argv[i], &trivial_pos, '\0', 1);
   }
-  register_(env, ARGV_REGISTERED_NAME, argv_list);
+  return arg_v;
 }
 
 char *read_file(char *name, int *len) {
@@ -927,19 +924,13 @@ int main(int argc, char *argv[]) {
   struct Env *env = create_env(NULL);
   register_all_orphan_builtin(env);
 
-  // reject the solution that register raw argv directly into global env
-  // the element that `register_argv` registers to its first argument will have
-  // type `TYPE_LIST`, which cannot be manipulated in any way
-  // it is considered really bad by me that there is a boulder in my language's
-  // global scope, so I create a special env beyond the tree and for argv only
-  struct Env *argv_env = create_env(NULL);
-  register_argv(argv_env, argc, argv);
-  // register_builtin_with_env(env, "main&", builtin_main_cont, argv_env);
+  struct Element *argv_ele = create_element_builtin(builtin_argv_cont, NULL);
+  argv_ele->value.builtin_value->foreign = init_argv(argc, argv);
+  register_(env, "argv&", argv_ele);
 
   struct Element *write_ele = create_element_builtin(builtin_write, NULL);
   write_ele->value.builtin_value->foreign = init_file_env();
   register_(env, "write", write_ele);
-  // register_builtin_with_env(env, "write", builtin_write, file_env);
 
   int len = 0;
   char *source = read_file(argv[1], &len);
