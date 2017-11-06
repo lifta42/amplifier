@@ -793,21 +793,17 @@ void parse_eval(char *source, struct Env *env, int len);
 //   //
 // }
 
-// struct Element *builtin_main_cont(struct Element **args, int arg_count,
-//                                   struct Builtin *self) {
-//   assert(arg_count == 1);
-//   assert(args[0]->type == TYPE_LAMBDA || args[0]->type == TYPE_BUILTIN);
-//   if (args[0]->type == TYPE_LAMBDA) {
-//     assert(args[0]->value.lambda_value->arg_count == 1);
-//   }
-//   struct Element *argv_cont = malloc(sizeof(struct Element));
-//   argv_cont->type = TYPE_BUILTIN;
-//   argv_cont->value.builtin_value = malloc(sizeof(struct Builtin));
-//   argv_cont->value.builtin_value->parent =
-//       parent; // this `parent` has raw argv in it
-//   argv_cont->value.builtin_value->func = builtin_argv_cont;
-//   return apply(args[0], &argv_cont, 1);
-// }
+struct Element *builtin_main_cont(struct Element **args, int arg_count,
+                                  struct Builtin *self) {
+  assert(arg_count == 1);
+  assert(args[0]->type == TYPE_LAMBDA || args[0]->type == TYPE_BUILTIN);
+  if (args[0]->type == TYPE_LAMBDA) {
+    assert(args[0]->value.lambda_value->arg_count == 1);
+  }
+  struct Element *argv_ele = create_element_builtin(builtin_argv_cont, NULL);
+  argv_ele->value.builtin_value->foreign = self->foreign;
+  return apply(args[0], &argv_ele, 1);
+}
 
 struct Element *builtin_trivial_main_cont(struct Element **args, int arg_count,
                                           struct Builtin *self) {
@@ -924,9 +920,9 @@ int main(int argc, char *argv[]) {
   struct Env *env = create_env(NULL);
   register_all_orphan_builtin(env);
 
-  struct Element *argv_ele = create_element_builtin(builtin_argv_cont, NULL);
-  argv_ele->value.builtin_value->foreign = init_argv(argc, argv);
-  register_(env, "argv&", argv_ele);
+  struct Element *main_ele = create_element_builtin(builtin_main_cont, NULL);
+  main_ele->value.builtin_value->foreign = init_argv(argc, argv);
+  register_(env, "main&", main_ele);
 
   struct Element *write_ele = create_element_builtin(builtin_write, NULL);
   write_ele->value.builtin_value->foreign = init_file_env();
