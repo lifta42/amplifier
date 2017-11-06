@@ -2,8 +2,10 @@
 // Created: 12:35, 2017.10.30 by liftA42.
 #include <assert.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdnoreturn.h>
 #include <string.h>
 
 #define MAX_NAME_LEN 32
@@ -40,18 +42,21 @@ struct Lambda {
   struct ElementList *body;
 };
 
-typedef struct Element *(*BuiltinFunc)(struct Element **, int, struct Env *);
+struct Builtin;
+typedef struct Element *(*BuiltinFunc)(struct Element **, int,
+                                       struct Builtin *);
 
 struct Builtin {
   BuiltinFunc func;
   struct Env *parent;
+  void *foreign;
 };
 
 struct Element {
   enum ElementType type;
   union {
     int int_value;
-    int bool_value;
+    bool bool_value;
     char *name_value;
     struct ElementList *list_value;
     struct Builtin *builtin_value;
@@ -90,14 +95,24 @@ struct Element *create_element_int(int value) {
   return ele;
 }
 
-struct Element *create_element_bool(int value) {
+struct Element *create_element_bool(bool value) {
   struct Element *ele = malloc(sizeof(struct Element));
   ele->type = TYPE_BOOL;
-  ele->value.bool_value = value != 0;
+  ele->value.bool_value = value;
   return ele;
 }
 
-// rarely create lambda, built-in and name, so no util for them
+struct Element *create_element_builtin(BuiltinFunc func, struct Env *parent) {
+  struct Element *ele = malloc(sizeof(struct Element));
+  ele->type = TYPE_BUILTIN;
+  ele->value.builtin_value = malloc(sizeof(struct Builtin));
+  ele->value.builtin_value->func = func;
+  ele->value.builtin_value->parent = parent;
+  ele->value.builtin_value->foreign = NULL;
+  return ele;
+}
+
+// rarely create lambda and name, so no util for them
 
 // the following two couples are actually workaround for a fact, that there's
 // nothing other than the seven basic types in this language
@@ -387,7 +402,7 @@ struct Element *apply(struct Element *ele, struct Element **args,
   if (ele->type == TYPE_BUILTIN) {
     // built-in does not need its own env, just use its parent's one if exists
     struct Element *result = ele->value.builtin_value->func(
-        args, arg_count, ele->value.builtin_value->parent);
+        args, arg_count, ele->value.builtin_value);
     // TYPE_LIST type value is un-manipulated in this language, unlike the
     // origin Scheme and LISP. It is a good question that whether I should allow
     // built-in to return TYPE_LIST value, since it is able to do so. I forbid
@@ -555,7 +570,7 @@ struct Element *parse(char *source, int *pos) {
 
 // Part 4: built-in
 struct Element *builtin_add(struct Element **args, int arg_count,
-                            struct Env *parent) {
+                            struct Builtin *self) {
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
@@ -564,7 +579,7 @@ struct Element *builtin_add(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_debug(struct Element **args, int arg_count,
-                              struct Env *parent) {
+                              struct Builtin *self) {
   assert(arg_count == 1);
   switch (args[0]->type) {
   case TYPE_INT:
@@ -603,7 +618,7 @@ struct Element *builtin_debug(struct Element **args, int arg_count,
     for (int i = 0; i < item_count; i++) {
       printf("%s", prefix);
       if (args[0]->value.list_value->elements[i]->type != TYPE_LIST) {
-        builtin_debug(&args[0]->value.list_value->elements[i], 1, parent);
+        builtin_debug(&args[0]->value.list_value->elements[i], 1, self);
       } else {
         printf("(...)");
       }
@@ -620,7 +635,7 @@ struct Element *builtin_debug(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_eq(struct Element **args, int arg_count,
-                           struct Env *parent) {
+                           struct Builtin *self) {
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
@@ -629,7 +644,7 @@ struct Element *builtin_eq(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_gt(struct Element **args, int arg_count,
-                           struct Env *parent) {
+                           struct Builtin *self) {
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
@@ -638,7 +653,7 @@ struct Element *builtin_gt(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_mul(struct Element **args, int arg_count,
-                            struct Env *parent) {
+                            struct Builtin *self) {
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
@@ -647,7 +662,7 @@ struct Element *builtin_mul(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_sub(struct Element **args, int arg_count,
-                            struct Env *parent) {
+                            struct Builtin *self) {
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_INT);
   assert(args[1]->type == TYPE_INT);
@@ -656,46 +671,41 @@ struct Element *builtin_sub(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_is_nil(struct Element **args, int arg_count,
-                               struct Env *parent) {
+                               struct Builtin *self) {
   assert(arg_count == 1);
   return create_element_bool(args[0]->type == TYPE_NULL);
 }
 
-struct Element *builtin_exit(struct Element **args, int arg_count,
-                             struct Env *parent) {
+noreturn struct Element *builtin_exit(struct Element **args, int arg_count,
+                                      struct Builtin *self) {
   assert(arg_count == 1);
   assert(args[0]->type == TYPE_INT);
   exit(args[0]->value.int_value);
-  return create_element_null(); // trivial
 }
 
 #define FOLDR_CALLBACK_REGISTERED_NAME "reserved_foldr-callback"
 #define FOLDR_INIT_REGISTERED_NAME "reserved_foldr-init"
-struct Element *builtin_foldr_impl(struct Element **, int, struct Env *);
+struct Element *builtin_foldr_impl(struct Element **, int, struct Builtin *);
 // (foldr callback init) ==>
 // <env <built-in (args...) ...> >
 struct Element *builtin_foldr(struct Element **args, int arg_count,
-                              struct Env *parent) {
+                              struct Builtin *self) {
   assert(arg_count == 2);
   struct Element *callback = args[0], *init = args[1];
   assert(callback->type == TYPE_LAMBDA || callback->type == TYPE_BUILTIN);
 
-  struct Env *env = create_env(parent);
+  struct Env *env = create_env(self->parent);
   register_(env, FOLDR_CALLBACK_REGISTERED_NAME, callback);
   register_(env, FOLDR_INIT_REGISTERED_NAME, init);
 
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_BUILTIN;
-  ele->value.builtin_value = malloc(sizeof(struct Builtin));
-  ele->value.builtin_value->func = builtin_foldr_impl;
-  ele->value.builtin_value->parent = env;
-  return ele;
+  return create_element_builtin(builtin_foldr_impl, env);
 }
 
 struct Element *builtin_foldr_impl(struct Element **args, int arg_count,
-                                   struct Env *parent) {
-  struct Element *callback = resolve(FOLDR_CALLBACK_REGISTERED_NAME, parent),
-                 *init = resolve(FOLDR_INIT_REGISTERED_NAME, parent);
+                                   struct Builtin *self) {
+  struct Element *callback =
+                     resolve(FOLDR_CALLBACK_REGISTERED_NAME, self->parent),
+                 *init = resolve(FOLDR_INIT_REGISTERED_NAME, self->parent);
   struct Element *product = init;
   for (int i = arg_count - 1; i >= 0; i--) {
     struct Element *apply_args[2] = {product, args[i]};
@@ -705,11 +715,11 @@ struct Element *builtin_foldr_impl(struct Element **args, int arg_count,
 }
 
 #define PIPE_FUNC_LIST_REGISTERED_NAME "reserved_pipe-func-list"
-struct Element *builtin_pipe_impl(struct Element **, int, struct Env *);
+struct Element *builtin_pipe_impl(struct Element **, int, struct Builtin *);
 // (pipe f g) with f :: (lambda (<args: length=x>) ...), g :: (lambda (x) ...)
 // ==> (lambda (<args: length=x>) (g (f args...)))
 struct Element *builtin_pipe(struct Element **args, int arg_count,
-                             struct Env *parent) {
+                             struct Builtin *self) {
   assert(arg_count >= 2);
   // `func_list` happens to be a list of elements, it cannot be applied
   struct Element *func_list = create_element_list(arg_count);
@@ -718,21 +728,16 @@ struct Element *builtin_pipe(struct Element **args, int arg_count,
     func_list->value.list_value->elements[i] = args[i];
   }
 
-  struct Env *env = create_env(parent);
+  struct Env *env = create_env(self->parent);
   register_(env, PIPE_FUNC_LIST_REGISTERED_NAME, func_list);
 
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_BUILTIN;
-  ele->value.builtin_value = malloc(sizeof(struct Builtin));
-  ele->value.builtin_value->func = builtin_pipe_impl;
-  ele->value.builtin_value->parent = env;
-
-  return ele;
+  return create_element_builtin(builtin_pipe_impl, env);
 }
 
 struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
-                                  struct Env *parent) {
-  struct Element *func_list = resolve(PIPE_FUNC_LIST_REGISTERED_NAME, parent);
+                                  struct Builtin *self) {
+  struct Element *func_list =
+      resolve(PIPE_FUNC_LIST_REGISTERED_NAME, self->parent);
   struct Element **current_args = args;
   struct Element *current_result = NULL; // to prevent rvalue ref
   int current_arg_count = arg_count;
@@ -746,26 +751,27 @@ struct Element *builtin_pipe_impl(struct Element **args, int arg_count,
 }
 
 #define ARGV_REGISTERED_NAME "reserved_argv"
-struct Element *builtin_argv(struct Element **args, int arg_count,
-                             struct Env *parent) {
-  assert(arg_count == 2);
-  struct Element *join_outer = args[0], *join_inner = args[1];
-  assert(join_outer->type == TYPE_BUILTIN || join_outer->type == TYPE_LAMBDA);
-  assert(join_inner->type == TYPE_BUILTIN || join_inner->type == TYPE_LAMBDA);
-  struct Element *argv = resolve(ARGV_REGISTERED_NAME, parent);
-  int argv_count = argv->value.list_value->length;
-  struct Element **argv_list = malloc(sizeof(struct Element) * argv_count);
-  for (int i = 0; i < argv_count; i++) {
-    // maybe a bad code reuse example
-    argv_list[i] =
-        eval_quote_impl(argv->value.list_value->elements[i], join_inner);
-  }
-  // maybe a bad code not-reuse example
-  return apply(join_outer, argv_list, arg_count);
-}
+// `cont` postfix stands for continuation-passing-style
+// struct Element *builtin_argv_cont(struct Element **args, int arg_count,
+//                                   struct Env *parent) {
+//   assert(arg_count == 2);
+//   struct Element *join_outer = args[0], *join_inner = args[1];
+//   assert(join_outer->type == TYPE_BUILTIN || join_outer->type ==
+//   TYPE_LAMBDA); assert(join_inner->type == TYPE_BUILTIN || join_inner->type
+//   == TYPE_LAMBDA); struct Element *argv = resolve(ARGV_REGISTERED_NAME,
+//   parent); int argv_count = argv->value.list_value->length; struct Element
+//   **argv_list = malloc(sizeof(struct Element) * argv_count); for (int i = 0;
+//   i < argv_count; i++) {
+//     // maybe a bad code reuse example
+//     argv_list[i] =
+//         eval_quote_impl(argv->value.list_value->elements[i], join_inner);
+//   }
+//   // maybe a bad code not-reuse example
+//   return apply(join_outer, argv_list, arg_count);
+// }
 
 struct Element *builtin_same(struct Element **args, int arg_count,
-                             struct Env *parent) {
+                             struct Builtin *self) {
   assert(arg_count == 2);
   assert(args[0]->type == TYPE_NAME && args[1]->type == TYPE_NAME);
   return create_element_bool(
@@ -773,7 +779,7 @@ struct Element *builtin_same(struct Element **args, int arg_count,
 }
 
 struct Element *builtin_if(struct Element **args, int arg_count,
-                           struct Env *parent) {
+                           struct Builtin *self) {
   assert(arg_count == 3);
   struct Element *cond = args[0], *then = args[1], *other = args[2];
   assert(cond->type = TYPE_BOOL);
@@ -782,36 +788,34 @@ struct Element *builtin_if(struct Element **args, int arg_count,
   return apply(cond->value.bool_value ? then : other, NULL, 0);
 }
 
-struct Element *builtin_write(struct Element **args, int arg_count,
-                              struct Env *parent) {
-  assert(arg_count == 2);
-  struct Element *file_no = args[0], *output = args[1];
-  assert(file_no->type == TYPE_INT);
-  assert(output->type == TYPE_INT);
-
-  int file_desc = file_no->value.int_value;
-  struct Element *file_table = resolve("_file_table", parent);
-  struct Element *file_info = file_table->value.list_value->elements[file_desc];
-  if (file_info->type == TYPE_NULL) {
-    fprintf(stderr, "file descriptor %d does not related to a valid file\n",
-            file_desc);
-    exit(RUNTIME_ERROR);
-  }
-  struct Element *permission = file_info->value.list_value->elements[0];
-  struct Element *file_ptr = file_info->value.list_value->elements[1];
-  if (strstr(permission->value.name_value, "w") == NULL) {
-    fprintf(stderr, "do not have permission to write file %d\n", file_desc);
-    exit(RUNTIME_ERROR);
-  }
-  FILE *file = unpack_pointer(file_ptr);
-  int code = output->value.int_value;
-  if (code < 0x0 || code > 0xff) {
-    fprintf(stderr, "output char %d is out of range\n", code);
-    exit(RUNTIME_ERROR);
-  }
-  fputc((char)code, file);
-  return create_element_null();
-}
+// struct Element *builtin_write(struct Element **args, int arg_count,
+//                               struct Builtin *self) {
+//   assert(arg_count == 2);
+//   struct Element *file_no = args[0], *output = args[1];
+//   assert(file_no->type == TYPE_INT);
+//   assert(output->type == TYPE_INT);
+//
+//   int file_desc = file_no->value.int_value;
+//   struct Element *file_table = resolve("_file_table", parent);
+//   struct Element *file_info =
+//   file_table->value.list_value->elements[file_desc]; if (file_info->type ==
+//   TYPE_NULL) {
+//     fprintf(stderr, "file descriptor %d does not related to a valid file\n",
+//             file_desc);
+//     exit(RUNTIME_ERROR);
+//   }
+//   struct Element *permission = file_info->value.list_value->elements[0];
+//   struct Element *file_ptr = file_info->value.list_value->elements[1];
+//   if (strstr(permission->value.name_value, "w") == NULL) {
+//     fprintf(stderr, "do not have permission to write file %d\n", file_desc);
+//     exit(RUNTIME_ERROR);
+//   }
+//   FILE *file = unpack_pointer(file_ptr);
+//   int code = output->value.int_value;
+//   assert(isprint(code) || isspace(code));
+//   fputc((char)code, file);
+//   return create_element_null();
+// }
 
 void register_all_orphan_builtin(struct Env *env);
 void register_all_related_builtin(struct Env *env, struct Env *with_env);
@@ -820,71 +824,43 @@ char *read_file(char *name, int *len);
 void parse_eval(char *source, struct Env *env, int len);
 // this is a built-in that actually works as a small driver, so it shared lots
 // of driver components
-struct Element *builtin_with(struct Element **args, int arg_count,
-                             struct Env *parent) {
-  assert(arg_count == 2);
-  struct Element *module_name = args[0], *callback = args[1];
-  assert(module_name->type == TYPE_NAME);
-  assert(callback->type == TYPE_LAMBDA || callback->type == TYPE_BUILTIN);
+// struct Element *builtin_with(struct Element **args, int arg_count,
+//                              struct Env *parent) {
+//   //
+// }
 
-  char *relative_name = module_name->value.name_value;
-  struct Element *argv_0 =
-      resolve(ARGV_REGISTERED_NAME, parent)->value.list_value->elements[0];
-  int str_len = 0;
-  char *file_name = unpack_string_literal(argv_0, &str_len);
+// struct Element *builtin_main_cont(struct Element **args, int arg_count,
+//                                   struct Builtin *self) {
+//   assert(arg_count == 1);
+//   assert(args[0]->type == TYPE_LAMBDA || args[0]->type == TYPE_BUILTIN);
+//   if (args[0]->type == TYPE_LAMBDA) {
+//     assert(args[0]->value.lambda_value->arg_count == 1);
+//   }
+//   struct Element *argv_cont = malloc(sizeof(struct Element));
+//   argv_cont->type = TYPE_BUILTIN;
+//   argv_cont->value.builtin_value = malloc(sizeof(struct Builtin));
+//   argv_cont->value.builtin_value->parent =
+//       parent; // this `parent` has raw argv in it
+//   argv_cont->value.builtin_value->func = builtin_argv_cont;
+//   return apply(args[0], &argv_cont, 1);
+// }
 
-  // `some-dir/a.out` ==> `some-dir/` `a.out`
-  char *split = strrchr(file_name, '/');
-  if (split == NULL) {
-    file_name[0] = '\0';
-  } else {
-    *(split + 1) = '\0';
-  }
-  file_name =
-      realloc(file_name, sizeof(char) * (strlen(file_name) +
-                                         strlen(relative_name) + 4 + 1));
-  strcat(file_name, relative_name);
-  strcat(file_name, ".scm");
+struct Element *builtin_trivial_main_cont(struct Element **args, int arg_count,
+                                          struct Builtin *self) {
+  return create_element_null();
+}
 
-  int source_len = 0;
-  char *source = read_file(file_name, &source_len);
-
-  // for foreign module, it should not determine it is imported or evaluated
-  // directly from command line argument, so create a global env for it
-  struct Env *env = create_env(NULL);
-  register_all_orphan_builtin(env);
-
-  struct Env *argv_env = create_env(NULL);
-  // fake argv for more `with` in foreign module
-  register_argv(argv_env, 1, &file_name);
-  register_all_related_builtin(env, argv_env);
-
-  parse_eval(source, env, source_len);
-  // now everything important in foreign module is registered into `env`
-
-  // here, we make `env` a invisible layer between callback's will-be-created
-  // env and its parent, to insert everything we got from foreign module
-  if (callback->type == TYPE_LAMBDA) {
-    env->parent = callback->value.lambda_value->parent;
-    callback->value.lambda_value->parent = env;
-  } else {
-    // a little missing duck type
-    env->parent = callback->value.builtin_value->parent;
-    callback->value.builtin_value->parent = env;
-  }
-
-  return apply(callback, NULL, 0);
+struct Element *builtin_string_impl_cont(struct Element **args, int arg_count,
+                                         struct Builtin *self) {
+  assert(arg_count == 1);
+  assert(args[0]->type == TYPE_BUILTIN || args[0]->type == TYPE_LAMBDA);
+  return create_element_null();
 }
 
 // Part 5: driver
 void register_builtin_with_env(struct Env *env, char *name, BuiltinFunc builtin,
                                struct Env *with_env) {
-  struct Element *ele = malloc(sizeof(struct Element));
-  ele->type = TYPE_BUILTIN;
-  ele->value.builtin_value = malloc(sizeof(struct Builtin));
-  ele->value.builtin_value->func = builtin;
-  ele->value.builtin_value->parent = with_env;
-  register_(env, name, ele);
+  register_(env, name, create_element_builtin(builtin, with_env));
 }
 
 void register_builtin(struct Env *env, char *name, BuiltinFunc builtin) {
@@ -904,11 +880,6 @@ void register_all_orphan_builtin(struct Env *env) {
   register_builtin(env, "pipe", builtin_pipe);
   register_builtin(env, "same", builtin_same);
   register_builtin(env, "if", builtin_if);
-}
-
-void register_all_related_builtin(struct Env *env, struct Env *with_env) {
-  register_builtin_with_env(env, "argv", builtin_argv, with_env);
-  register_builtin_with_env(env, "with", builtin_with, with_env);
 }
 
 void register_argv(struct Env *env, int argc, char *argv[]) {
@@ -970,6 +941,7 @@ struct Env *init_file_env() {
   file_stdout->value.list_value->elements[0]->type = TYPE_NAME;
   file_stdout->value.list_value->elements[0]->value.name_value = "w";
   file_stdout->value.list_value->elements[1] = create_pointer(stdout);
+
   struct Element *file_table = create_element_list(MAX_OPEN_FILE);
   file_table->value.list_value->elements[0] = file_stdin;
   file_table->value.list_value->elements[1] = file_stdout;
@@ -982,19 +954,6 @@ struct Env *init_file_env() {
 }
 
 int main(int argc, char *argv[]) {
-  struct Element *test_list = create_element_list(4);
-  test_list->value.list_value->elements[0] = create_element_int(42);
-  test_list->value.list_value->elements[1] = create_element_bool(1);
-  test_list->value.list_value->elements[2] = create_element_list(0);
-  test_list->value.list_value->elements[3] = create_element_null();
-  struct Element *bi = malloc(sizeof(struct Element));
-  bi->type = TYPE_BUILTIN;
-  bi->value.builtin_value = malloc(sizeof(struct Builtin));
-  bi->value.builtin_value->parent = NULL;
-  bi->value.builtin_value->func = builtin_debug;
-  apply(bi, &test_list, 1);
-  printf("\n");
-
   if (argc < 2) {
     printf("Please specify entry source file as command line arguement.\n");
     return 0;
@@ -1010,9 +969,10 @@ int main(int argc, char *argv[]) {
   // global scope, so I create a special env beyond the tree and for argv only
   struct Env *argv_env = create_env(NULL);
   register_argv(argv_env, argc, argv);
-  register_all_related_builtin(env, argv_env);
+  // register_builtin_with_env(env, "main&", builtin_main_cont, argv_env);
+
   struct Env *file_env = init_file_env();
-  register_builtin_with_env(env, "write", builtin_write, file_env);
+  // register_builtin_with_env(env, "write", builtin_write, file_env);
 
   int len = 0;
   char *source = read_file(argv[1], &len);

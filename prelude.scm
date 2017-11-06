@@ -123,5 +123,3 @@
 (define long-literal-example
   (quote list-quoter 'Hello, liftA42!\nHello, liftA42!\nHello, liftA42!')
 )
-
-(debug long-literal-example)
