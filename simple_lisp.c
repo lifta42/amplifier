@@ -751,34 +751,39 @@ struct Element *builtin_if(struct Element **args, int arg_count,
   return apply(cond->value.bool_value ? then : other, NULL, 0);
 }
 
-// struct Element *builtin_write(struct Element **args, int arg_count,
-//                               struct Builtin *self) {
-//   assert(arg_count == 2);
-//   struct Element *file_no = args[0], *output = args[1];
-//   assert(file_no->type == TYPE_INT);
-//   assert(output->type == TYPE_INT);
-//
-//   int file_desc = file_no->value.int_value;
-//   struct Element *file_table = resolve("_file_table", parent);
-//   struct Element *file_info =
-//   file_table->value.list_value->elements[file_desc]; if (file_info->type ==
-//   TYPE_NULL) {
-//     fprintf(stderr, "file descriptor %d does not related to a valid file\n",
-//             file_desc);
-//     exit(RUNTIME_ERROR);
-//   }
-//   struct Element *permission = file_info->value.list_value->elements[0];
-//   struct Element *file_ptr = file_info->value.list_value->elements[1];
-//   if (strstr(permission->value.name_value, "w") == NULL) {
-//     fprintf(stderr, "do not have permission to write file %d\n", file_desc);
-//     exit(RUNTIME_ERROR);
-//   }
-//   FILE *file = unpack_pointer(file_ptr);
-//   int code = output->value.int_value;
-//   assert(isprint(code) || isspace(code));
-//   fputc((char)code, file);
-//   return create_element_null();
-// }
+struct FileInfo {
+  char *perm;
+  FILE *file;
+};
+
+struct FileTable {
+  struct FileInfo **files;
+};
+
+struct Element *builtin_write(struct Element **args, int arg_count,
+                              struct Builtin *self) {
+  assert(arg_count == 2);
+  struct Element *file_no = args[0], *output = args[1];
+  assert(file_no->type == TYPE_INT);
+  assert(output->type == TYPE_INT);
+
+  int file_desc = file_no->value.int_value;
+  struct FileTable *file_table = self->foreign;
+  struct FileInfo *file_info = file_table->files[file_no->value.int_value];
+  if (file_info == NULL) {
+    fprintf(stderr, "file descriptor %d does not related to a valid file\n",
+            file_desc);
+    exit(RUNTIME_ERROR);
+  }
+  if (strstr(file_info->perm, "w") == NULL) {
+    fprintf(stderr, "do not have permission to write file %d\n", file_desc);
+    exit(RUNTIME_ERROR);
+  }
+  int code = output->value.int_value;
+  assert(isprint(code) || isspace(code));
+  fputc((char)code, file_info->file);
+  return create_element_null();
+}
 
 void register_all_orphan_builtin(struct Env *env);
 void register_all_related_builtin(struct Env *env, struct Env *with_env);
@@ -898,27 +903,19 @@ void parse_eval(char *source, struct Env *env, int len) {
   }
 }
 
-struct Env *init_file_env() {
-  struct Element *file_stdin = create_element_list(2);
-  file_stdin->value.list_value->elements[0] = malloc(sizeof(struct Element));
-  file_stdin->value.list_value->elements[0]->type = TYPE_NAME;
-  file_stdin->value.list_value->elements[0]->value.name_value = "r";
-  file_stdin->value.list_value->elements[1] = create_pointer(stdin);
-  struct Element *file_stdout = create_element_list(2);
-  file_stdout->value.list_value->elements[0] = malloc(sizeof(struct Element));
-  file_stdout->value.list_value->elements[0]->type = TYPE_NAME;
-  file_stdout->value.list_value->elements[0]->value.name_value = "w";
-  file_stdout->value.list_value->elements[1] = create_pointer(stdout);
-
-  struct Element *file_table = create_element_list(MAX_OPEN_FILE);
-  file_table->value.list_value->elements[0] = file_stdin;
-  file_table->value.list_value->elements[1] = file_stdout;
+struct FileTable *init_file_env() {
+  struct FileTable *table = malloc(sizeof(struct FileTable));
+  table->files = malloc(sizeof(struct FileInfo *) * MAX_OPEN_FILE);
+  table->files[0] = malloc(sizeof(struct FileInfo));
+  table->files[0]->perm = "r";
+  table->files[0]->file = stdin;
+  table->files[1] = malloc(sizeof(struct FileInfo));
+  table->files[1]->perm = "w";
+  table->files[1]->file = stdout;
   for (int i = 2; i < MAX_OPEN_FILE; i++) {
-    file_table->value.list_value->elements[i] = create_element_null();
+    table->files[i] = NULL;
   }
-  struct Env *file_env = create_env(NULL);
-  register_(file_env, "_file_table", file_table);
-  return file_env;
+  return table;
 }
 
 int main(int argc, char *argv[]) {
@@ -939,7 +936,9 @@ int main(int argc, char *argv[]) {
   register_argv(argv_env, argc, argv);
   // register_builtin_with_env(env, "main&", builtin_main_cont, argv_env);
 
-  struct Env *file_env = init_file_env();
+  struct Element *write_ele = create_element_builtin(builtin_write, NULL);
+  write_ele->value.builtin_value->foreign = init_file_env();
+  register_(env, "write", write_ele);
   // register_builtin_with_env(env, "write", builtin_write, file_env);
 
   int len = 0;
