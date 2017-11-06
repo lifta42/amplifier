@@ -169,29 +169,6 @@ struct Element *create_string_literal(char *source, int *pos, char until,
   return ele;
 }
 
-struct Element *create_pointer(void *ptr) {
-  struct Element *ele = create_element_list(sizeof(void *));
-  // https://www.securecoding.cert.org/confluence/display/c/INT36-C.+Converting+a+pointer+to+integer+or+integer+to+pointer
-  uintptr_t p = (uintptr_t)ptr;
-  for (int i = 0; i < ele->value.list_value->length; i++) {
-    ele->value.list_value->elements[i] = create_element_int(p & 0xff);
-    p >>= 8;
-  }
-  assert(p == 0x0);
-  return ele;
-}
-
-void *unpack_pointer(struct Element *ele) {
-  uintptr_t p = 0x0;
-  for (int i = ele->value.list_value->length - 1; i >= 0; i--) {
-    p |= (unsigned)ele->value.list_value->elements[i]->value.int_value;
-    if (i != 0) {
-      p <<= 8;
-    }
-  }
-  return (void *)p;
-}
-
 struct EnvPair {
   char *name;
   struct Element *value;
