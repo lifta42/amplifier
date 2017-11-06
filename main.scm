@@ -1,7 +1,3 @@
-(define id (lambda (x) x))
+(define bare-string 'Hello, liftA42!')
 
-(main& (lambda (argv&)
-  (write 1 65)
-  (write 1 10)
-  (debug argv&)
-))
+(debug bare-string)

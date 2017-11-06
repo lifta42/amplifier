@@ -12,6 +12,7 @@
 #define ENV_INIT_SIZE 8
 #define LIST_MAX_SIZE 32
 #define MAX_OPEN_FILE 8 // including stdin and stdout
+#define STRING_INIT_LEN 32
 
 #define DISPLAY_LIST_MAX_ITEM 3
 
@@ -114,29 +115,26 @@ struct Element *create_element_builtin(BuiltinFunc func, struct Env *parent) {
 
 // rarely create lambda and name, so no util for them
 
-// the following two couples are actually workaround for a fact, that there's
-// nothing other than the seven basic types in this language
-// I cannot make an array of int, a pointer to int, or a function that takes an
-// int as an argument, just like what I can do in C
-// thus, at the time I must store something other than those basic types, I have
-// to use the TYPE_LIST in a way that it will not be expected to be used
+struct String {
+  char *content;
+  int length;
+  int size;
+};
 
+struct Element *builtin_string_impl_cont(struct Element **args, int arg_count,
+                                         struct Builtin *self);
 // this guy has a weird interface because its usage: for source code and for
 // command line arguments
 struct Element *create_string_literal(char *source, int *pos, char until,
                                       int escaped) {
-  struct Element **char_seq = malloc(sizeof(struct Element *) * LIST_MAX_SIZE);
-  int char_count = 0;
+  struct String *str = malloc(sizeof(struct String));
+  str->content = malloc(sizeof(char) * STRING_INIT_LEN);
+  str->length = 0;
+  str->size = STRING_INIT_LEN;
   while (source[*pos] != until) {
-    if (char_count == LIST_MAX_SIZE - 1) { // next writing will fill this list
-      // perfect code shape is more important than tail recursive
-      struct Element *rest = create_string_literal(source, pos, until, escaped);
-      struct Element *pack = create_element_list(LIST_MAX_SIZE);
-      for (int i = 0; i < LIST_MAX_SIZE - 1; i++) {
-        pack->value.list_value->elements[i] = char_seq[i];
-      }
-      pack->value.list_value->elements[LIST_MAX_SIZE - 1] = rest;
-      return pack;
+    if (str->length == str->size) {
+      str->size *= 2;
+      str->content = realloc(str->content, sizeof(char) * str->size);
     }
 
     char c = source[*pos];
@@ -161,49 +159,14 @@ struct Element *create_string_literal(char *source, int *pos, char until,
         exit(PARSE_ERROR); // awkward... just keep
       }
     }
-    char_seq[char_count] = create_element_int((int)c);
-    char_count++;
+    str->content[str->length] = c;
+    str->length++;
     (*pos)++;
   }
-  assert(char_count < LIST_MAX_SIZE); // there must be space for one more child
-  struct Element *pack = create_element_list(char_count + 1);
-  for (int i = 0; i < char_count; i++) {
-    pack->value.list_value->elements[i] = char_seq[i];
-  }
-  // end of string symbol
-  pack->value.list_value->elements[char_count] = create_element_null();
-  return pack;
-}
 
-char *unpack_string_literal(struct Element *literal, int *str_length) {
-  int expect_length = literal->value.list_value->length;
-  // no need to + 1, because there is a end-of-string symbol counted
-  char *str = malloc(sizeof(char) * expect_length);
-  struct Element *pack = literal;
-  int ele_pos = 0;
-  *str_length = 0;
-  // there is a chance to write this in recursive style, but I prefer not to
-  // use `strcat`
-  while (1) {
-    struct Element *ele = pack->value.list_value->elements[ele_pos];
-    if (ele->type == TYPE_LIST) {
-      expect_length += ele->value.list_value->length - 1;
-      str = realloc(str, sizeof(char) * expect_length);
-      pack = ele;
-      ele_pos = 0;
-    } else if (ele->type == TYPE_NULL) {
-      str[*str_length] = '\0';
-      break;
-    } else {
-      str[*str_length] = (char)ele->value.int_value;
-      (*str_length)++;
-      // `nil` is counted in `expect_length`
-      assert(*str_length < expect_length);
-      ele_pos++;
-      assert(ele_pos < MAX_NAME_LEN); // or it should not go into this branch
-    }
-  }
-  return str;
+  struct Element *ele = create_element_builtin(builtin_string_impl_cont, NULL);
+  ele->value.builtin_value->foreign = str;
+  return ele;
 }
 
 struct Element *create_pointer(void *ptr) {
@@ -854,7 +817,12 @@ struct Element *builtin_string_impl_cont(struct Element **args, int arg_count,
                                          struct Builtin *self) {
   assert(arg_count == 1);
   assert(args[0]->type == TYPE_BUILTIN || args[0]->type == TYPE_LAMBDA);
-  return create_element_null();
+  struct String *str = self->foreign;
+  struct Element **str_ele = malloc(sizeof(struct Element *) * str->length);
+  for (int i = 0; i < str->length; i++) {
+    str_ele[i] = create_element_int((int)str->content[i]);
+  }
+  return apply(args[0], str_ele, str->length);
 }
 
 // Part 5: driver
