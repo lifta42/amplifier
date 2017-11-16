@@ -10,10 +10,6 @@
 (define sum (foldr + 0))
 
 ; (quote cons '\n') ==> (quote cons (<nl> nil)) ==> (cons <nl> nil)
-(define newline (lambda ()
-  (write 1 (car (quote cons '\n')))
-))
-
 (define flip (lambda (func)
   (lambda (a b) (func b a))
 ))
@@ -88,30 +84,6 @@
 (define true (= 42 42))
 (define false (> 42 42))
 
-(define list-quoter (foldr
-  (lambda (acc item)
-    (if (nil? acc) (lambda ()
-      (list item)
-    ) (lambda () (if (= (car acc) 0) (lambda ()
-      item
-    ) (lambda ()
-      (cons item acc)
-    ))))
-  )
-  (list 0)
-))
-
-(define literal-example (quote list-quoter 'Hello, liftA42!'))
-
-(define list-print-string (lambda (str)
-  (list-map (lambda (c) (write 1 c)) str)
-  (newline)
-))
-
-(list-print-string literal-example)
-
-(define list-argv (argv list list-quoter))
-
 (define list-concat (lambda (dst src)
   (if (nil? dst) (lambda ()
     src
@@ -120,6 +92,4 @@
   ))
 ))
 
-(define long-literal-example
-  (quote list-quoter 'Hello, liftA42!\nHello, liftA42!\nHello, liftA42!')
-)
+(debug (sum 1 2 3 4))
