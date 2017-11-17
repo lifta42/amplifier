@@ -117,7 +117,8 @@ Piece *parse_int(Source *source) {
 }
 
 void *internal_int(void *arg, Env *env) {
-  return NULL;
+  Piece *p = arg;
+  return p->func(piece_create(internal_int, env), p->env);
 }
 
 int main() {
