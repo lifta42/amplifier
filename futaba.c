@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum Error { UNRESOLVED_NAME = 0 };
+// Part 0, preparation
+enum Error { ERROR_UNRESOLVED_NAME = 1, ERROR_CANNOT_OPEN_FILE, ERROR_NO_ARGV };
 
 // `Piece` structure
 // Everything in Futaba is a `Piece`.
@@ -33,6 +34,7 @@ Piece *piece_create_int(int num) {
   return piece_create(internal_int, p_int);
 }
 
+// Part 1, parser
 // `Table` structure
 // Compile (parse) time helper for linking names and `Piece`s.
 typedef struct {
@@ -63,7 +65,7 @@ Piece *table_resolve(Table *table, char *name) {
   }
   if (table->upper == NULL) {
     fprintf(stderr, "unresolved name: %s\n", name);
-    exit(UNRESOLVED_NAME);
+    exit(ERROR_UNRESOLVED_NAME);
   } else {
     return table_resolve(table->upper, name);
   }
@@ -80,7 +82,6 @@ void table_register(Table *table, char *name, Piece *piece) {
   table->length++;
 }
 
-// Part 1, parser
 // `Source` structure
 // A `Source` represents a source code file.
 typedef struct {
@@ -133,6 +134,40 @@ Piece *internal_int(Piece *callee, void *backpack) {
   return apply(callee, piece_create_int(*p_num));
 }
 
-int main() {
-  //
+// Part 4, driver
+Source *main_create_source(char *file_name) {
+  FILE *source_file = fopen(file_name, "r");
+  if (!source_file) {
+    fprintf(stderr, "cannot open file \"%s\"\n", file_name);
+    exit(ERROR_CANNOT_OPEN_FILE);
+  }
+
+  char *source = NULL;
+  int length = 0;
+  while (true) {
+    char *line = NULL;
+    int line_len = 0;
+    line_len = (int)getline(&line, (size_t *)&line_len, source_file);
+    if (line_len < 0) {
+      break;
+    }
+    if (source == NULL) {
+      source = line;
+    } else {
+      source = realloc(source, sizeof(char) * (length + line_len + 1));
+      strcat(source, line);
+    }
+    length += line_len;
+  }
+  fclose(source_file);
+  return source_create(source, length);
+}
+
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    fprintf(stderr, "please specify source file by command line argument\n");
+    exit(ERROR_NO_ARGV);
+  }
+  Piece *p = parse_int(main_create_source(argv[1]));
+  printf("%d\n", *(int *)p->backpack);
 }
