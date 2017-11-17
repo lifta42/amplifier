@@ -6,70 +6,83 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum Error {
-  UNRESOLVED_NAME = 0
+enum Error { UNRESOLVED_NAME = 0 };
+
+// `Piece` structure
+// Everything in Futaba is a `Piece`.
+struct _Piece;
+typedef struct _Piece *(*PieceFunc)(struct _Piece *, void *);
+
+struct _Piece {
+  PieceFunc function;
+  void *backpack;
 };
+typedef struct _Piece Piece;
 
-struct _Env;
-typedef void *(*PieceFunc)(void *, struct _Env *);
-
-typedef struct {
-  PieceFunc func;
-  struct _Env *env;
-} Piece;
-
-Piece *piece_create(PieceFunc func, struct _Env *env) {
+Piece *piece_create(PieceFunc func, void *pack) {
   Piece *piece = malloc(sizeof(Piece));
-  piece->func = func;
-  piece->env = env;
+  piece->function = func;
+  piece->backpack = pack;
   return piece;
 }
 
+Piece *internal_int(Piece *, void *);
+Piece *piece_create_int(int num) {
+  int *p_int = malloc(sizeof(int));
+  *p_int = num;
+  return piece_create(internal_int, p_int);
+}
+
+// `Table` structure
+// Compile (parse) time helper for linking names and `Piece`s.
 typedef struct {
   char *name; // zero ended
-  void *magic_piece; // the entry of foreign types
+  Piece *piece;
 } Record;
 
-struct _Env {
+typedef struct _Table {
   Record **records;
   int size; // varied
   int length;
-  struct _Env *upper;
-};
-typedef struct _Env Env;
+  struct _Table *upper;
+} Table;
 
-#define ENV_INIT_SIZE 16
-Env *env_create(Env *upper) {
-  Env *env = malloc(sizeof(Env));
-  env->records = malloc(sizeof(Record *) * ENV_INIT_SIZE);
-  env->size = ENV_INIT_SIZE;
-  env->length = 0;
-  return 0;
+#define TABLE_INIT_SIZE 16
+Table *table_create(Table *upper) {
+  Table *table = malloc(sizeof(Table));
+  table->records = malloc(sizeof(Record *) * TABLE_INIT_SIZE);
+  table->size = TABLE_INIT_SIZE;
+  table->length = 0;
+  return table;
 }
-void *env_resolve(Env *env, char *name) {
-  for (int i = 0; i < env->length; i++) {
-    if (strcmp(env->records[i]->name, name) == 0) {
-      return env->records[i]->magic_piece;
+Piece *table_resolve(Table *table, char *name) {
+  for (int i = 0; i < table->length; i++) {
+    if (strcmp(table->records[i]->name, name) == 0) {
+      return table->records[i]->piece;
     }
   }
-  if (env->upper == NULL) {
+  if (table->upper == NULL) {
     fprintf(stderr, "unresolved name: %s\n", name);
     exit(UNRESOLVED_NAME);
   } else {
-    return env_resolve(env->upper, name);
+    return table_resolve(table->upper, name);
   }
 }
-void env_register(Env *env, char *name, void *piece) {
-  if (env->length == env->size) {
-    env->size *= 2;
-    env->records = realloc(env, sizeof(Record *) * env->size);
+void table_register(Table *table, char *name, Piece *piece) {
+  if (table->length == table->size) {
+    table->size *= 2;
+    table->records = realloc(table, sizeof(Record *) * table->size);
   }
   Record *record = malloc(sizeof(Record));
   record->name = name;
-  record->magic_piece = piece;
-  env->records[env->length] = record;
+  record->piece = piece;
+  table->records[table->length] = record;
+  table->length++;
 }
 
+// Part 1, parser
+// `Source` structure
+// A `Source` represents a source code file.
 typedef struct {
   char *source;
   int length;
@@ -98,8 +111,6 @@ Source *source_create(char *s, int len) {
   return source;
 }
 
-#define REGISTER_INT_STRING "chosen-int"
-void *internal_int(void *arg, Env *env);
 Piece *parse_int(Source *source) {
   int num = 0;
   do {
@@ -108,17 +119,18 @@ Piece *parse_int(Source *source) {
       break;
     }
   } while (isdigit(source_fetch(source)));
-
-  int *int_piece = malloc(sizeof(int));
-  *int_piece = num;
-  Env *env = env_create(NULL);
-  env_register(env, REGISTER_INT_STRING, int_piece);
-  return piece_create(internal_int, env);
+  return piece_create_int(num);
 }
 
-void *internal_int(void *arg, Env *env) {
-  Piece *p = arg;
-  return p->func(piece_create(internal_int, env), p->env);
+// Part 2, apply
+void *apply(Piece *caller, Piece *callee) {
+  return caller->function(callee, caller->backpack);
+}
+
+// Part 3, internal `Piece`s
+Piece *internal_int(Piece *callee, void *backpack) {
+  int *p_num = backpack;
+  return apply(callee, piece_create_int(*p_num));
 }
 
 int main() {
