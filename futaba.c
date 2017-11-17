@@ -1,5 +1,6 @@
 // Interpreter and runtime for Futaba programming languange.
 // Created by liftA42 on Nov 17, 2017.
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,11 +11,23 @@ enum Error {
 };
 
 struct _Env;
-typedef void *(*Piece)(void *, struct _Env *);
+typedef void *(*PieceFunc)(void *, struct _Env *);
+
+typedef struct {
+  PieceFunc func;
+  struct _Env *env;
+} Piece;
+
+Piece *piece_create(PieceFunc func, struct _Env *env) {
+  Piece *piece = malloc(sizeof(Piece));
+  piece->func = func;
+  piece->env = env;
+  return piece;
+}
 
 typedef struct {
   char *name; // zero ended
-  Piece piece;
+  void *magic_piece; // the entry of foreign types
 } Record;
 
 struct _Env {
@@ -33,10 +46,10 @@ Env *env_create(Env *upper) {
   env->length = 0;
   return 0;
 }
-Piece env_resolve(Env *env, char *name) {
+void *env_resolve(Env *env, char *name) {
   for (int i = 0; i < env->length; i++) {
     if (strcmp(env->records[i]->name, name) == 0) {
-      return env->records[i]->piece;
+      return env->records[i]->magic_piece;
     }
   }
   if (env->upper == NULL) {
@@ -46,14 +59,14 @@ Piece env_resolve(Env *env, char *name) {
     return env_resolve(env->upper, name);
   }
 }
-void env_register(Env *env, char *name, Piece piece) {
+void env_register(Env *env, char *name, void *piece) {
   if (env->length == env->size) {
     env->size *= 2;
     env->records = realloc(env, sizeof(Record *) * env->size);
   }
   Record *record = malloc(sizeof(Record));
   record->name = name;
-  record->piece = piece;
+  record->magic_piece = piece;
   env->records[env->length] = record;
 }
 
@@ -83,6 +96,28 @@ Source *source_create(char *s, int len) {
   source->current = 0;
   source->line = source->column = 1;
   return source;
+}
+
+#define REGISTER_INT_STRING "chosen-int"
+void *internal_int(void *arg, Env *env);
+Piece *parse_int(Source *source) {
+  int num = 0;
+  do {
+    num = num * 10 + (source_fetch(source) - '0');
+    if (!source_forward(source)) {
+      break;
+    }
+  } while (isdigit(source_fetch(source)));
+
+  int *int_piece = malloc(sizeof(int));
+  *int_piece = num;
+  Env *env = env_create(NULL);
+  env_register(env, REGISTER_INT_STRING, int_piece);
+  return piece_create(internal_int, env);
+}
+
+void *internal_int(void *arg, Env *env) {
+  return NULL;
 }
 
 int main() {
