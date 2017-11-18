@@ -164,25 +164,53 @@ Piece *parse_int(Source *source) {
   return piece_create_int(num);
 }
 
-Piece *parse_name(Source *source, Table *table) {
+char *parse_cover_name(Source *source, int *name_len) {
   char *name = &source->source[source->current];
-  int name_len = 0;
+  *name_len = 0;
   do {
     source_forward(source);
-    name_len++;
-  } while (isgraph(source_fetch(source)));
+    (*name_len)++;
+  } while (isgraph(source_fetch(source)) && source_fetch(source) != '.');
+  return name;
+}
+
+Piece *parse_name(Source *source, Table *table) {
+  int name_len;
+  char *name = parse_cover_name(source, &name_len);
   Piece *piece = table_resolve(table, name, name_len);
   if (piece == NULL) {
-    fprintf(stderr, "unresolved name \"%.*s\" near %s:%d:%d\n", name_len,
-            name, source->file_name, source->line, source->column);
+    fprintf(stderr, "unresolved name \"%.*s\" near %s:%d:%d\n", name_len, name,
+            source->file_name, source->line, source->column);
     exit(ERROR_UNRESOLVED_NAME);
   }
   return piece;
 }
 
+Piece *parse_until(Source *, Table *, Piece *, char);
+
+typedef struct {
+  Piece *body;
+  Piece *arg;
+} BackpackLambda;
+
+Piece *internal_lambda(Piece *, void *);
+Piece *internal_argument(Piece *, void *);
+
 Piece *parse_piece(Source *source, Table *table) {
   if (isdigit(source_fetch(source))) {
     return parse_int(source);
+  } else if (source_fetch(source) == '?') {
+    source_forward(source);
+
+    BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
+    int name_len;
+    char *name = parse_cover_name(source, &name_len);
+    Table *t = table_create(table);
+    table_register(table, name, name_len,
+                   piece_create(internal_argument, backpack));
+
+    backpack->body = parse_until(source, table, NULL, '.');
+    return piece_create(internal_lambda, backpack);
   } else if (isgraph(source_fetch(source))) {
     return parse_name(source, table);
   } else {
@@ -193,12 +221,10 @@ Piece *parse_piece(Source *source, Table *table) {
   }
 }
 
-Piece *parse_sentence(Source *, Table *, Piece *);
-
 Piece *parse(Source *source, Table *table) {
   Piece *result = NULL;
   while (source_fetch(source) != EOF) {
-    Piece *sentence = parse_sentence(source, table, NULL);
+    Piece *sentence = parse_until(source, table, NULL, ',');
     if (result == NULL) {
       result = sentence;
     } else {
@@ -210,20 +236,21 @@ Piece *parse(Source *source, Table *table) {
   return result;
 }
 
-Piece *parse_sentence(Source *source, Table *table, Piece *result) {
+Piece *parse_until(Source *source, Table *table, Piece *result, char until) {
   while (isspace(source_fetch(source))) {
     source_forward(source);
   }
-  if (source_fetch(source) == '.' || source_fetch(source) == EOF) {
+  if (source_fetch(source) == until || source_fetch(source) == EOF) {
     source_forward(source);
     return result;
   }
 
   if (result == NULL) {
-    return parse_sentence(source, table, parse_piece(source, table));
+    return parse_until(source, table, parse_piece(source, table), until);
   } else {
-    return parse_sentence(
-        source, table, piece_create_call(result, parse_piece(source, table)));
+    return parse_until(source, table,
+                       piece_create_call(result, parse_piece(source, table)),
+                       until);
   }
 }
 
@@ -240,6 +267,17 @@ Piece *internal_self(Piece *callee, void *backpack) {
 Piece *internal_call(Piece *callee, void *backpack) {
   BackpackCall *pack = backpack;
   return apply(apply(pack->caller, pack->callee), callee);
+}
+
+Piece *internal_lambda(Piece *callee, void *backpack) {
+  BackpackLambda *pack = backpack;
+  pack->arg = callee;
+  return pack->body;
+}
+
+Piece *internal_argument(Piece *callee, void *backpack) {
+  BackpackLambda *pack = backpack;
+  return apply(pack->arg, callee);
 }
 
 Piece *internal_put(Piece *callee, void *backpack) {
