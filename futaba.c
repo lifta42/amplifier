@@ -17,12 +17,14 @@ enum Error {
 // `Piece` structure
 // Everything in Futaba is a `Piece`.
 struct _Piece;
+
 typedef struct _Piece *(*PieceFunc)(struct _Piece *, void *);
 
 struct _Piece {
   PieceFunc function;
   void *backpack;
 };
+
 typedef struct _Piece Piece;
 
 Piece *piece_create(PieceFunc func, void *pack) {
@@ -33,16 +35,29 @@ Piece *piece_create(PieceFunc func, void *pack) {
 }
 
 Piece *internal_self(Piece *, void *);
-Piece *piece_create_int(int num) {
-  int *p_int = malloc(sizeof(int));
-  *p_int = num;
-  return piece_create(internal_self, p_int);
-}
 
-Piece *piece_create_bool(bool b) {
-  bool *p_b = malloc(sizeof(bool));
-  *p_b = b;
-  return piece_create(internal_self, p_b);
+#define PIECE_CREATE_GENERATE(type)                                            \
+  Piece *piece_create_##type(type val) {                                       \
+    type *p = malloc(sizeof(type));                                            \
+    *p = val;                                                                  \
+    return piece_create(internal_self, p);                                     \
+  }
+
+PIECE_CREATE_GENERATE(int)
+PIECE_CREATE_GENERATE(bool)
+
+typedef struct {
+  Piece *caller;
+  Piece *callee;
+} BackpackCall;
+
+Piece *internal_call(Piece *, void *);
+
+Piece *piece_create_call(Piece *caller, Piece *callee) {
+  BackpackCall *backpack = malloc(sizeof(BackpackCall));
+  backpack->caller = caller;
+  backpack->callee = callee;
+  return piece_create(internal_call, backpack);
 }
 
 // Part 1, parser
@@ -62,6 +77,7 @@ typedef struct _Table {
 } Table;
 
 #define TABLE_INIT_SIZE 16
+
 Table *table_create(Table *upper) {
   Table *table = malloc(sizeof(Table));
   table->records = malloc(sizeof(Record *) * TABLE_INIT_SIZE);
@@ -73,8 +89,7 @@ Table *table_create(Table *upper) {
 
 Piece *table_resolve(Table *table, char *name, int name_len) {
   if (table == NULL) {
-    fprintf(stderr, "unresolved name: %.*s\n", name_len, name);
-    exit(ERROR_UNRESOLVED_NAME);
+    return NULL;
   }
   for (int i = 0; i < table->length; i++) {
     if (name_len != table->records[i]->name_len) {
@@ -114,14 +129,17 @@ typedef struct {
 char source_fetch(Source *s) {
   return s->current == s->length ? EOF : s->source[s->current];
 }
+
 bool source_forward(Source *s) {
-  if (s->source[s->current] == '\n') {
-    s->line++;
-    s->column = 0;
-  } else {
-    s->column++;
+  if (s->current < s->length) {
+    if (s->source[s->current] == '\n') {
+      s->line++;
+      s->column = 0;
+    } else {
+      s->column++;
+    }
+    s->current++;
   }
-  s->current++;
   return s->current != s->length;
 }
 
@@ -146,17 +164,27 @@ Piece *parse_int(Source *source) {
   return piece_create_int(num);
 }
 
+Piece *parse_name(Source *source, Table *table) {
+  char *name = &source->source[source->current];
+  int name_len = 0;
+  do {
+    source_forward(source);
+    name_len++;
+  } while (isgraph(source_fetch(source)));
+  Piece *piece = table_resolve(table, name, name_len);
+  if (piece == NULL) {
+    fprintf(stderr, "unresolved name \"%.*s\" near %s:%d:%d\n", name_len,
+            name, source->file_name, source->line, source->column);
+    exit(ERROR_UNRESOLVED_NAME);
+  }
+  return piece;
+}
+
 Piece *parse_piece(Source *source, Table *table) {
   if (isdigit(source_fetch(source))) {
     return parse_int(source);
-  } else if (isprint(source_fetch(source))) {
-    char *name = source->source + source->current;
-    int name_len = 0;
-    do {
-      source_forward(source);
-      name_len++;
-    } while (isprint(source_fetch(source)) && source_fetch(source) != ' ');
-    return table_resolve(table, name, name_len);
+  } else if (isgraph(source_fetch(source))) {
+    return parse_name(source, table);
   } else {
     fprintf(stderr, "unrecognized symbol near \'0x%x\' at %s:%d:%d\n",
             source_fetch(source) & 0xff, source->file_name, source->line,
@@ -165,46 +193,37 @@ Piece *parse_piece(Source *source, Table *table) {
   }
 }
 
-typedef struct {
-  Piece *caller;
-  Piece *callee;
-} BackpackCall;
-Piece *internal_call(Piece *, void *);
-Piece *parse_impl(Source *, Table *, Piece *);
+Piece *parse_sentence(Source *, Table *, Piece *);
+
 Piece *parse(Source *source, Table *table) {
   Piece *result = NULL;
   while (source_fetch(source) != EOF) {
-    Piece *line = parse_impl(source, table, NULL);
+    Piece *sentence = parse_sentence(source, table, NULL);
     if (result == NULL) {
-      result = line;
+      result = sentence;
     } else {
-      if (line != NULL) {
-        BackpackCall *backpack = malloc(sizeof(BackpackCall));
-        backpack->caller = result;
-        backpack->callee = line;
-        result = piece_create(internal_call, backpack);
+      if (sentence != NULL) {
+        result = piece_create_call(result, sentence);
       }
     }
-    source_forward(source);
   }
   return result;
 }
 
-Piece *parse_impl(Source *source, Table *table, Piece *result) {
-  while (source_fetch(source) == ' ') {
+Piece *parse_sentence(Source *source, Table *table, Piece *result) {
+  while (isspace(source_fetch(source))) {
     source_forward(source);
   }
-  if (source_fetch(source) == '\n' || source_fetch(source) == EOF) {
+  if (source_fetch(source) == '.' || source_fetch(source) == EOF) {
+    source_forward(source);
     return result;
   }
 
   if (result == NULL) {
-    return parse_impl(source, table, parse_piece(source, table));
+    return parse_sentence(source, table, parse_piece(source, table));
   } else {
-    BackpackCall *backpack = malloc(sizeof(BackpackCall));
-    backpack->caller = result;
-    backpack->callee = parse_piece(source, table);
-    return parse_impl(source, table, piece_create(internal_call, backpack));
+    return parse_sentence(
+        source, table, piece_create_call(result, parse_piece(source, table)));
   }
 }
 
@@ -250,6 +269,7 @@ INTERNAL_GENERATE_2(eq, ==, bool)
 Piece *internal_end(Piece *callee, void *backpack) { return NULL; }
 
 Piece *internal_if_2(Piece *, void *);
+
 Piece *internal_if(Piece *callee, void *backpack) {
   return piece_create(internal_if_2, callee->backpack);
 }
@@ -258,7 +278,9 @@ typedef struct {
   Piece *left;
   bool cond;
 } BackpackIf2;
+
 Piece *internal_if_3(Piece *, void *);
+
 Piece *internal_if_2(Piece *callee, void *backpack) {
   bool *p_b = backpack;
   BackpackIf2 *pack = malloc(sizeof(BackpackIf2));
