@@ -72,7 +72,6 @@ Table *table_create(Table *upper) {
 }
 
 Piece *table_resolve(Table *table, char *name, int name_len) {
-  printf("resolving name %.*s in table %p\n", name_len, name, table);
   if (table == NULL) {
     fprintf(stderr, "unresolved name: %.*s\n", name_len, name);
     exit(ERROR_UNRESOLVED_NAME);
@@ -82,8 +81,6 @@ Piece *table_resolve(Table *table, char *name, int name_len) {
       continue;
     }
     if (strncmp(table->records[i]->name, name, name_len) == 0) {
-      printf("name: %.*s piece: %p\n", name_len, name,
-             table->records[i]->piece);
       return table->records[i]->piece;
     }
   }
@@ -212,63 +209,48 @@ Piece *parse_impl(Source *source, Table *table, Piece *result) {
 }
 
 // Part 2, apply
-void *apply(Piece *caller, Piece *callee) {
-  printf("apply caller func %p callee func %p\n", caller->function, callee->function);
+Piece *apply(Piece *caller, Piece *callee) {
   return caller->function(callee, caller->backpack);
 }
 
 // Part 3, internals
 Piece *internal_self(Piece *callee, void *backpack) {
-  printf("calling `self` with callee %p\n", callee);
   return apply(callee, piece_create(internal_self, backpack));
 }
 
 Piece *internal_call(Piece *callee, void *backpack) {
-  printf("calling `call` with callee %p\n", callee);
   BackpackCall *pack = backpack;
   return apply(apply(pack->caller, pack->callee), callee);
 }
 
 Piece *internal_put(Piece *callee, void *backpack) {
-  printf("calling `put` with callee %p\n", callee);
   int *p_char = callee->backpack;
   putchar(*p_char);
-  putchar('\n');
   return piece_create(internal_self, NULL);
 }
 
-Piece *internal_add_2(Piece *, void *);
-Piece *internal_add(Piece *callee, void *backpack) {
-  printf("calling `add` with callee %p\n", callee);
-  return piece_create(internal_add_2, callee->backpack);
-}
+#define INTERNAL_GENERATE_2(name, op, type)                                    \
+  Piece *internal_##name##_2(Piece *, void *);                                 \
+  Piece *internal_##name(Piece *callee, void *backpack) {                      \
+    return piece_create(internal_##name##_2, callee->backpack);                \
+  }                                                                            \
+                                                                               \
+  Piece *internal_##name##_2(Piece *callee, void *backpack) {                  \
+    type *i1 = backpack, *i2 = callee->backpack;                               \
+    return piece_create_##type(*i1 op * i2);                                   \
+  }
 
-Piece *internal_add_2(Piece *callee, void *backpack) {
-  printf("calling `add_2` with callee %p\n", callee);
-  int *i1 = backpack, *i2 = callee->backpack;
-  return piece_create_int(*i1 + *i2);
-}
+INTERNAL_GENERATE_2(add, +, int)
+INTERNAL_GENERATE_2(sub, -, int)
+INTERNAL_GENERATE_2(mul, *, int)
+INTERNAL_GENERATE_2(div, /, int)
+INTERNAL_GENERATE_2(lt, <, bool)
+INTERNAL_GENERATE_2(eq, ==, bool)
 
-Piece *internal_end(Piece *callee, void *backpack) {
-  printf("calling `end` with callee %p\n", callee);
-  return NULL;
-}
-
-Piece *internal_lt_2(Piece *callee, void *backpack);
-Piece *internal_lt(Piece *callee, void *backpack) {
-  printf("calling `lt` with callee %p\n", callee);
-  return piece_create(internal_lt_2, callee->backpack);
-}
-
-Piece *internal_lt_2(Piece *callee, void *backpack) {
-  printf("calling `lt_2` with callee %p\n", callee);
-  int *i1 = backpack, *i2 = callee->backpack;
-  return piece_create_bool(*i1 < *i2);
-}
+Piece *internal_end(Piece *callee, void *backpack) { return NULL; }
 
 Piece *internal_if_2(Piece *, void *);
 Piece *internal_if(Piece *callee, void *backpack) {
-  printf("calling `if` with callee %p\n", callee);
   return piece_create(internal_if_2, callee->backpack);
 }
 
@@ -278,7 +260,6 @@ typedef struct {
 } BackpackIf2;
 Piece *internal_if_3(Piece *, void *);
 Piece *internal_if_2(Piece *callee, void *backpack) {
-  printf("calling `if_2` with callee %p\n", callee);
   bool *p_b = backpack;
   BackpackIf2 *pack = malloc(sizeof(BackpackIf2));
   pack->left = callee;
@@ -287,7 +268,6 @@ Piece *internal_if_2(Piece *callee, void *backpack) {
 }
 
 Piece *internal_if_3(Piece *callee, void *backpack) {
-  printf("calling `if_3` with callee %p\n", callee);
   BackpackIf2 *pack = backpack;
   return pack->cond ? pack->left : callee;
 }
@@ -333,6 +313,7 @@ int main(int argc, char *argv[]) {
   Table *table = table_create(NULL);
   MAIN_REGISTER_INTERNAL(table, "put", internal_put, NULL);
   MAIN_REGISTER_INTERNAL(table, "+", internal_add, NULL);
+  MAIN_REGISTER_INTERNAL(table, "-", internal_sub, NULL);
   MAIN_REGISTER_INTERNAL(table, "<", internal_lt, NULL);
   MAIN_REGISTER_INTERNAL(table, "if", internal_if, NULL);
 
