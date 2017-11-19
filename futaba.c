@@ -157,17 +157,7 @@ Source *source_create(char *s, int len, char *file_name) {
   return source;
 }
 
-Piece *parse_int(Source *source) {
-  int num = 0;
-  do {
-    num = num * 10 + (source_fetch(source) - '0');
-    if (!source_forward(source)) {
-      break;
-    }
-  } while (isdigit(source_fetch(source)));
-  return piece_create_int(num);
-}
-
+// parser utils
 char *parse_cover_name(Source *source, int *name_len) {
   char *name = &source->source[source->current];
   *name_len = 0;
@@ -185,6 +175,22 @@ char *parse_cover_name(Source *source, int *name_len) {
   fprintf(stderr, "%s:%d:%d\n", source->file_name, source->line,               \
           source->column);
 
+Piece *parse_aggregate_call(Piece *acc, Piece *item) {
+  return acc == NULL ? item : piece_create_call(acc, item);
+}
+
+// parser components
+Piece *parse_int(Source *source) {
+  int num = 0;
+  do {
+    num = num * 10 + (source_fetch(source) - '0');
+    if (!source_forward(source)) {
+      break;
+    }
+  } while (isdigit(source_fetch(source)));
+  return piece_create_int(num);
+}
+
 Piece *parse_name(Source *source, Table *table) {
   int name_len;
   char *name = parse_cover_name(source, &name_len);
@@ -200,27 +206,34 @@ Piece *parse_sentence(Source *, Table *);
 
 typedef struct {
   Piece *body;
-  Piece *arg;
+  Piece **arg;
 } BackpackLambda;
 
 Piece *internal_lambda(Piece *, void *);
 Piece *internal_argument(Piece *, void *);
 
+Piece *parse_lambda(Source *source, Table *table) {
+  source_forward(source);
+
+  BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
+  backpack->arg = malloc(sizeof(Piece *));
+  *backpack->arg = NULL;
+
+  int name_len;
+  char *name = parse_cover_name(source, &name_len);
+  Table *t = table_create(table);
+  table_register(table, name, name_len,
+                 piece_create(internal_argument, backpack->arg));
+
+  backpack->body = parse_sentence(source, table);
+  return piece_create(internal_lambda, backpack);
+}
+
 Piece *parse_piece(Source *source, Table *table) {
   if (isdigit(source_fetch(source))) {
     return parse_int(source);
   } else if (source_fetch(source) == '?') {
-    source_forward(source);
-
-    BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
-    int name_len;
-    char *name = parse_cover_name(source, &name_len);
-    Table *t = table_create(table);
-    table_register(table, name, name_len,
-                   piece_create(internal_argument, backpack));
-
-    backpack->body = parse_sentence(source, table);
-    return piece_create(internal_lambda, backpack);
+    return parse_lambda(source, table);
   } else if (isgraph(source_fetch(source))) {
     return parse_name(source, table);
   } else {
@@ -228,14 +241,6 @@ Piece *parse_piece(Source *source, Table *table) {
                   source_fetch(source) & 0xff);
     exit(ERROR_UNRECOGNIZED_SYMBOL);
   }
-}
-
-Piece *parse(Source *source, Table *table) {
-  return parse_sentence(source, table);
-}
-
-Piece *parse_aggregate_call(Piece *acc, Piece *item) {
-  return acc == NULL ? item : piece_create_call(acc, item);
 }
 
 Piece *parse_sentence_impl(Source *source, Table *table, Piece *big,
@@ -280,13 +285,13 @@ Piece *internal_call(Piece *callee, void *backpack) {
 
 Piece *internal_lambda(Piece *callee, void *backpack) {
   BackpackLambda *pack = backpack;
-  pack->arg = callee;
+  *pack->arg = callee;
   return pack->body;
 }
 
 Piece *internal_argument(Piece *callee, void *backpack) {
-  BackpackLambda *pack = backpack;
-  return apply(pack->arg, callee);
+  Piece **pack = backpack;
+  return apply(*pack, callee);
 }
 
 Piece *internal_put(Piece *callee, void *backpack) {
@@ -320,40 +325,10 @@ Piece *internal_put(Piece *callee, void *backpack) {
                                                                                \
   Piece *internal_##name##_3(Piece *callee, void *backpack) {                  \
     struct _Backpack_##name##_2 *pack = backpack;                              \
-    printf("x: %d y: %d\n", pack->i1, pack->i2);                               \
     return apply(callee, piece_create_##type(pack->i1 op pack->i2));           \
   }
 
-Piece *internal_add_2(Piece *, void *);
-
-Piece *internal_add(Piece *callee, void *backpack) {
-  printf("add\n");
-  return piece_create(internal_add_2, callee->backpack);
-}
-
-typedef struct {
-  int i1;
-  int i2;
-} BackpackAdd2;
-
-Piece *internal_add_3(Piece *, void *);
-
-Piece *internal_add_2(Piece *callee, void *backpack) {
-  printf("add_2\n");
-  int *i1 = backpack, *i2 = callee->backpack;
-  BackpackAdd2 *pack = malloc(sizeof(BackpackAdd2));
-  pack->i1 = *i1;
-  pack->i2 = *i2;
-  return piece_create(internal_add_3, pack);
-}
-
-Piece *internal_add_3(Piece *callee, void *backpack) {
-  printf("add_3\n");
-  BackpackAdd2 *pack = backpack;
-  printf("x: %d y: %d\n", pack->i1, pack->i2);
-  return apply(callee, piece_create_int(pack->i1 + pack->i2));
-}
-
+INTERNAL_GENERATE_2(add, +, int)
 INTERNAL_GENERATE_2(sub, -, int)
 INTERNAL_GENERATE_2(mul, *, int)
 INTERNAL_GENERATE_2(div, /, int)
@@ -436,6 +411,6 @@ int main(int argc, char *argv[]) {
   MAIN_REGISTER_INTERNAL(table, "<", internal_lt, NULL);
   MAIN_REGISTER_INTERNAL(table, "if", internal_if, NULL);
 
-  Piece *p = parse(main_create_source(argv[1]), table);
+  Piece *p = parse_sentence(main_create_source(argv[1]), table);
   apply(p, piece_create(internal_end, NULL));
 }
