@@ -14,6 +14,10 @@ enum Error {
   ERROR_UNRECOGNIZED_SYMBOL
 };
 
+#define SYNTAX_SENTENCE_END '.'
+#define SYNTAX_LAMBDA_HEAD '?'
+#define SYNTAX_SENTENCT_BREAK ','
+
 // `Piece` structure
 // Everything in Futaba is a `Piece`.
 struct _Piece;
@@ -170,23 +174,29 @@ char *parse_cover_name(Source *source, int *name_len) {
   do {
     source_forward(source);
     (*name_len)++;
-  } while (isgraph(source_fetch(source)) && source_fetch(source) != '.');
+  } while (isgraph(source_fetch(source)) &&
+           source_fetch(source) != SYNTAX_SENTENCE_END &&
+           source_fetch(source) != SYNTAX_SENTENCT_BREAK);
   return name;
 }
+
+#define PARSE_GRUMBLE(source, message...)                                      \
+  fprintf(stderr, message);                                                    \
+  fprintf(stderr, "%s:%d:%d\n", source->file_name, source->line,               \
+          source->column);
 
 Piece *parse_name(Source *source, Table *table) {
   int name_len;
   char *name = parse_cover_name(source, &name_len);
   Piece *piece = table_resolve(table, name, name_len);
   if (piece == NULL) {
-    fprintf(stderr, "unresolved name \"%.*s\" near %s:%d:%d\n", name_len, name,
-            source->file_name, source->line, source->column);
+    PARSE_GRUMBLE(source, "unresolved name \"%.*s\" near ", name_len, name);
     exit(ERROR_UNRESOLVED_NAME);
   }
   return piece;
 }
 
-Piece *parse_until(Source *, Table *, Piece *, char);
+Piece *parse_sentence(Source *, Table *);
 
 typedef struct {
   Piece *body;
@@ -209,49 +219,48 @@ Piece *parse_piece(Source *source, Table *table) {
     table_register(table, name, name_len,
                    piece_create(internal_argument, backpack));
 
-    backpack->body = parse_until(source, table, NULL, '.');
+    backpack->body = parse_sentence(source, table);
     return piece_create(internal_lambda, backpack);
   } else if (isgraph(source_fetch(source))) {
     return parse_name(source, table);
   } else {
-    fprintf(stderr, "unrecognized symbol near \'0x%x\' at %s:%d:%d\n",
-            source_fetch(source) & 0xff, source->file_name, source->line,
-            source->column);
+    PARSE_GRUMBLE(source, "unrecognized symbol near \'0x%x\' at ",
+                  source_fetch(source) & 0xff);
     exit(ERROR_UNRECOGNIZED_SYMBOL);
   }
 }
 
 Piece *parse(Source *source, Table *table) {
-  Piece *result = NULL;
-  while (source_fetch(source) != EOF) {
-    Piece *sentence = parse_until(source, table, NULL, ',');
-    if (result == NULL) {
-      result = sentence;
-    } else {
-      if (sentence != NULL) {
-        result = piece_create_call(result, sentence);
-      }
-    }
-  }
-  return result;
+  return parse_sentence(source, table);
 }
 
-Piece *parse_until(Source *source, Table *table, Piece *result, char until) {
+Piece *parse_aggregate_call(Piece *acc, Piece *item) {
+  return acc == NULL ? item : piece_create_call(acc, item);
+}
+
+Piece *parse_sentence_impl(Source *source, Table *table, Piece *big,
+                           Piece *small) {
   while (isspace(source_fetch(source))) {
     source_forward(source);
   }
-  if (source_fetch(source) == until || source_fetch(source) == EOF) {
+
+  if (source_fetch(source) == SYNTAX_SENTENCE_END ||
+      source_fetch(source) == EOF) {
     source_forward(source);
-    return result;
+    return parse_aggregate_call(big, small);
+  } else if (source_fetch(source) == SYNTAX_SENTENCT_BREAK) {
+    source_forward(source);
+    return parse_sentence_impl(source, table, parse_aggregate_call(big, small),
+                               NULL);
   }
 
-  if (result == NULL) {
-    return parse_until(source, table, parse_piece(source, table), until);
-  } else {
-    return parse_until(source, table,
-                       piece_create_call(result, parse_piece(source, table)),
-                       until);
-  }
+  return parse_sentence_impl(
+      source, table, big,
+      parse_aggregate_call(small, parse_piece(source, table)));
+}
+
+Piece *parse_sentence(Source *source, Table *table) {
+  return parse_sentence_impl(source, table, NULL, NULL);
 }
 
 // Part 2, apply
@@ -288,16 +297,63 @@ Piece *internal_put(Piece *callee, void *backpack) {
 
 #define INTERNAL_GENERATE_2(name, op, type)                                    \
   Piece *internal_##name##_2(Piece *, void *);                                 \
+                                                                               \
   Piece *internal_##name(Piece *callee, void *backpack) {                      \
     return piece_create(internal_##name##_2, callee->backpack);                \
   }                                                                            \
                                                                                \
+  struct _Backpack_##name##_2 {                                                \
+    int i1;                                                                    \
+    int i2;                                                                    \
+  };                                                                           \
+                                                                               \
+  Piece *internal_##name##_3(Piece *, void *);                                 \
+                                                                               \
   Piece *internal_##name##_2(Piece *callee, void *backpack) {                  \
-    type *i1 = backpack, *i2 = callee->backpack;                               \
-    return piece_create_##type(*i1 op * i2);                                   \
+    int *i1 = backpack, *i2 = callee->backpack;                                \
+    struct _Backpack_##name##_2 *pack =                                        \
+        malloc(sizeof(struct _Backpack_##name##_2));                           \
+    pack->i1 = *i1;                                                            \
+    pack->i2 = *i2;                                                            \
+    return piece_create(internal_##name##_3, pack);                            \
+  }                                                                            \
+                                                                               \
+  Piece *internal_##name##_3(Piece *callee, void *backpack) {                  \
+    struct _Backpack_##name##_2 *pack = backpack;                              \
+    printf("x: %d y: %d\n", pack->i1, pack->i2);                               \
+    return apply(callee, piece_create_##type(pack->i1 op pack->i2));           \
   }
 
-INTERNAL_GENERATE_2(add, +, int)
+Piece *internal_add_2(Piece *, void *);
+
+Piece *internal_add(Piece *callee, void *backpack) {
+  printf("add\n");
+  return piece_create(internal_add_2, callee->backpack);
+}
+
+typedef struct {
+  int i1;
+  int i2;
+} BackpackAdd2;
+
+Piece *internal_add_3(Piece *, void *);
+
+Piece *internal_add_2(Piece *callee, void *backpack) {
+  printf("add_2\n");
+  int *i1 = backpack, *i2 = callee->backpack;
+  BackpackAdd2 *pack = malloc(sizeof(BackpackAdd2));
+  pack->i1 = *i1;
+  pack->i2 = *i2;
+  return piece_create(internal_add_3, pack);
+}
+
+Piece *internal_add_3(Piece *callee, void *backpack) {
+  printf("add_3\n");
+  BackpackAdd2 *pack = backpack;
+  printf("x: %d y: %d\n", pack->i1, pack->i2);
+  return apply(callee, piece_create_int(pack->i1 + pack->i2));
+}
+
 INTERNAL_GENERATE_2(sub, -, int)
 INTERNAL_GENERATE_2(mul, *, int)
 INTERNAL_GENERATE_2(div, /, int)
@@ -309,6 +365,7 @@ Piece *internal_end(Piece *callee, void *backpack) { return NULL; }
 Piece *internal_if_2(Piece *, void *);
 
 Piece *internal_if(Piece *callee, void *backpack) {
+  printf("if\n");
   return piece_create(internal_if_2, callee->backpack);
 }
 
@@ -320,6 +377,7 @@ typedef struct {
 Piece *internal_if_3(Piece *, void *);
 
 Piece *internal_if_2(Piece *callee, void *backpack) {
+  printf("if2\n");
   bool *p_b = backpack;
   BackpackIf2 *pack = malloc(sizeof(BackpackIf2));
   pack->left = callee;
@@ -329,6 +387,7 @@ Piece *internal_if_2(Piece *callee, void *backpack) {
 
 Piece *internal_if_3(Piece *callee, void *backpack) {
   BackpackIf2 *pack = backpack;
+  printf("if3 cond: %d\n", pack->cond);
   return pack->cond ? pack->left : callee;
 }
 
