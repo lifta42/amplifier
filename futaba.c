@@ -100,6 +100,13 @@ Record *record_register(Record *pre, char *name, int name_len, Piece *piece) {
   return record;
 }
 
+void record_destory(Record *r) {
+  if (r != NULL) {
+    record_destory(r->previous);
+    free(r);
+  }
+}
+
 // `Source` structure
 // A `Source` represents a source code file.
 typedef struct {
@@ -136,6 +143,11 @@ Source *source_create(char *s, int len, char *file_name) {
   source->current = 0;
   source->line = source->column = 1;
   return source;
+}
+
+void source_destory(Source *s) {
+  free(s->source);
+  free(s);
 }
 
 // parser utils
@@ -206,6 +218,8 @@ Piece *parse_lambda(Source *source, Record *record) {
   BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
   backpack->body = parse_sentence(source, r);
   backpack->arg = hold;
+
+  free(r);
   return piece_create(internal_lambda, backpack);
 }
 
@@ -374,6 +388,7 @@ Source *main_create_source(char *file_name) {
     } else {
       source = realloc(source, sizeof(char) * (length + line_len + 1));
       strcat(source, line);
+      free(line);
     }
     length += line_len;
   }
@@ -391,16 +406,20 @@ int main(int argc, char *argv[]) {
     exit(ERROR_NO_ARGV);
   }
 
-  Record *record = NULL;
-  MAIN_REGISTER_INTERNAL(record, "put", internal_put, NULL);
-  MAIN_REGISTER_INTERNAL(record, "+", internal_add, NULL);
-  MAIN_REGISTER_INTERNAL(record, "-", internal_sub, NULL);
-  MAIN_REGISTER_INTERNAL(record, "*", internal_mul, NULL);
-  MAIN_REGISTER_INTERNAL(record, "/", internal_div, NULL);
-  MAIN_REGISTER_INTERNAL(record, "<", internal_lt, NULL);
-  MAIN_REGISTER_INTERNAL(record, "=", internal_eq, NULL);
-  MAIN_REGISTER_INTERNAL(record, "?", internal_if, NULL);
+  Record *r = NULL;
+  MAIN_REGISTER_INTERNAL(r, "put", internal_put, NULL);
+  MAIN_REGISTER_INTERNAL(r, "+", internal_add, NULL);
+  MAIN_REGISTER_INTERNAL(r, "-", internal_sub, NULL);
+  MAIN_REGISTER_INTERNAL(r, "*", internal_mul, NULL);
+  MAIN_REGISTER_INTERNAL(r, "/", internal_div, NULL);
+  MAIN_REGISTER_INTERNAL(r, "<", internal_lt, NULL);
+  MAIN_REGISTER_INTERNAL(r, "=", internal_eq, NULL);
+  MAIN_REGISTER_INTERNAL(r, "?", internal_if, NULL);
 
-  Piece *p = parse_sentence(main_create_source(argv[1]), record);
+  Source *s = main_create_source(argv[1]);
+  Piece *p = parse_sentence(s, r);
+  source_destory(s);
+  record_destory(r);
+  
   apply(p, piece_create(internal_end, NULL));
 }
