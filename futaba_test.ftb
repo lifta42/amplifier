@@ -1,15 +1,18 @@
 ; main
 `put `+ `- `* `/ `< `= `then `id
-  `iter'
-    iter' iter' 65 then put 10
+  `Y
+    Y `self `n
+      `keep-going
+        n < 97 ? keep-going 0
+      ., ; keep-going
+      put n then n + 1, self
+    .. 65 then put 10
   .
-  ; iter'
-  `self `n
-    `keep
-      n < 97 ? keep 0
-    ., ; keep
-    put n then n + 1, self self
-  ..
+  ; Y
+  `f
+    `x f, x x.
+    `x f, x x.
+  .
 .........
 
 ; put + - * / < =
