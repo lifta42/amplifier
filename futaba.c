@@ -12,8 +12,11 @@ enum Error {
   ERROR_CANNOT_OPEN_FILE,
   ERROR_NO_ARGV,
   ERROR_UNRECOGNIZED_SYMBOL,
-  ERROR_UNCOMPLETED_SENTENCE
+  ERROR_UNCOMPLETED_SENTENCE,
+  ERROR_RECURSIVE_SELF
 };
+
+#define JIGSAW_INIT_SIZE 32
 
 #define SYNTAX_SENTENCE_END '.'
 #define SYNTAX_LAMBDA_HEAD '`'
@@ -183,7 +186,7 @@ Piece *parse_sentence(Source *, Record *);
 
 typedef struct {
   Piece *body;
-  Piece **arg;
+  Piece *arg;
 } BackpackLambda;
 
 Piece *internal_lambda(Piece *, void *);
@@ -193,15 +196,14 @@ Piece *parse_lambda(Source *source, Record *record) {
   source_forward(source);
 
   BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
-  backpack->arg = malloc(sizeof(Piece *));
-  *backpack->arg = NULL;
+  Piece *hold = piece_create(NULL, NULL);
 
   int name_len;
   char *name = parse_cover_name(source, &name_len);
-  Record *r = record_register(record, name, name_len,
-                              piece_create(internal_argument, backpack->arg));
+  Record *r = record_register(record, name, name_len, hold);
 
   backpack->body = parse_sentence(source, r);
+  backpack->arg = hold;
   return piece_create(internal_lambda, backpack);
 }
 
@@ -259,6 +261,15 @@ Piece *apply(Piece *caller, Piece *callee) {
 
 // Part 3, internals
 Piece *internal_self(Piece *callee, void *backpack) {
+  if (callee->function == internal_self) {
+    fprintf(stderr,
+            "recursive `self` calling between two pieces\n"
+            "piece 1 backpack: %p\n"
+            "piece 2: %p backpack: %p",
+            backpack, callee, callee->backpack);
+    printf("%d\n%d\n", *(int *)backpack, *(int *)callee->backpack);
+    exit(ERROR_RECURSIVE_SELF);
+  }
   return apply(callee, piece_create(internal_self, backpack));
 }
 
@@ -269,19 +280,8 @@ Piece *internal_call(Piece *callee, void *backpack) {
 
 Piece *internal_lambda(Piece *callee, void *backpack) {
   BackpackLambda *pack = backpack;
-  *pack->arg = callee;
+  memcpy(pack->arg, callee, sizeof(Piece));
   return pack->body;
-}
-
-Piece *internal_argument(Piece *callee, void *backpack) {
-  Piece **pack = backpack;
-  return apply(*pack, callee);
-}
-
-Piece *internal_arg_id(Piece *callee, void *backpack) {
-  Piece **piece = callee->backpack;
-  printf("extracted: %p\n", *piece);
-  return *piece;
 }
 
 Piece *internal_put(Piece *callee, void *backpack) {
@@ -401,7 +401,6 @@ int main(int argc, char *argv[]) {
   MAIN_REGISTER_INTERNAL(record, "<", internal_lt, NULL);
   MAIN_REGISTER_INTERNAL(record, "=", internal_eq, NULL);
   MAIN_REGISTER_INTERNAL(record, "?", internal_if, NULL);
-  MAIN_REGISTER_INTERNAL(record, "arg-id", internal_arg_id, NULL);
 
   Piece *p = parse_sentence(main_create_source(argv[1]), record);
   apply(p, piece_create(internal_end, NULL));

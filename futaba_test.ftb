@@ -1,6 +1,15 @@
 ; main
 `put `+ `- `* `/ `< `= `then `id
-  put 42 then put 10
+  `iter'
+    iter' iter' 65 then put 10
+  .
+  ; iter'
+  `self `n
+    `keep
+      n < 97 ? keep 0
+    ., ; keep
+    put n then n + 1, self self
+  ..
 .........
 
 ; put + - * / < =
@@ -17,5 +26,8 @@
 
 ; id
 `x x.
+
+; true false
+
 
 .
