@@ -16,8 +16,6 @@ enum Error {
   ERROR_RECURSIVE_SELF
 };
 
-#define JIGSAW_INIT_SIZE 32
-
 #define SYNTAX_SENTENCE_END '.'
 #define SYNTAX_LAMBDA_HEAD '`'
 #define SYNTAX_SENTENCT_BREAK ','
@@ -36,6 +34,7 @@ struct _Piece {
 
 typedef struct _Piece Piece;
 
+// generalized creator of `Piece`
 Piece *piece_create(PieceFunc func, void *pack) {
   Piece *piece = malloc(sizeof(Piece));
   piece->function = func;
@@ -43,6 +42,7 @@ Piece *piece_create(PieceFunc func, void *pack) {
   return piece;
 }
 
+// specific creator of common C types
 Piece *internal_self(Piece *, void *);
 
 #define PIECE_CREATE_GENERATE(type)                                            \
@@ -70,7 +70,7 @@ Piece *piece_create_call(Piece *caller, Piece *callee) {
 }
 
 // Part 1, parser
-// `Table` structure
+// `Record` structure
 // Compile (parse) time helper for linking names and `Piece`s.
 typedef struct _Record {
   char *name;
@@ -81,6 +81,7 @@ typedef struct _Record {
 
 Piece *record_resolve(Record *record, char *name, int name_len) {
   if (record == NULL) {
+    // there's no enough info about source code, so let parent to raise error
     return NULL;
   }
   if (name_len == record->name_len &&
@@ -118,7 +119,7 @@ bool source_forward(Source *s) {
   if (s->current < s->length) {
     if (s->source[s->current] == '\n') {
       s->line++;
-      s->column = 0;
+      s->column = 1;
     } else {
       s->column++;
     }
@@ -195,13 +196,14 @@ Piece *internal_argument(Piece *, void *);
 Piece *parse_lambda(Source *source, Record *record) {
   source_forward(source);
 
-  BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
-  Piece *hold = piece_create(NULL, NULL);
-
   int name_len;
   char *name = parse_cover_name(source, &name_len);
+
+  // `hold` will be filled per invoking
+  Piece *hold = piece_create(NULL, NULL);
   Record *r = record_register(record, name, name_len, hold);
 
+  BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
   backpack->body = parse_sentence(source, r);
   backpack->arg = hold;
   return piece_create(internal_lambda, backpack);
@@ -255,7 +257,6 @@ Piece *parse_sentence(Source *source, Record *record) {
 
 // Part 2, apply
 Piece *apply(Piece *caller, Piece *callee) {
-  // printf("apply %p %p\n", caller, callee);
   return caller->function(callee, caller->backpack);
 }
 
@@ -267,7 +268,6 @@ Piece *internal_self(Piece *callee, void *backpack) {
             "piece 1 backpack: %p\n"
             "piece 2: %p backpack: %p",
             backpack, callee, callee->backpack);
-    printf("%d\n%d\n", *(int *)backpack, *(int *)callee->backpack);
     exit(ERROR_RECURSIVE_SELF);
   }
   return apply(callee, piece_create(internal_self, backpack));
@@ -290,40 +290,39 @@ Piece *internal_put(Piece *callee, void *backpack) {
   return piece_create(internal_self, NULL);
 }
 
-#define INTERNAL_GENERATE_2(name, op, type)                                    \
+typedef struct {
+  int i1;
+  int i2;
+} BackpackOp2;
+
+#define INTERNAL_GENERATE_OP(name, op, type)                                   \
   Piece *internal_##name##_2(Piece *, void *);                                 \
                                                                                \
   Piece *internal_##name(Piece *callee, void *backpack) {                      \
     return piece_create(internal_##name##_2, callee->backpack);                \
   }                                                                            \
                                                                                \
-  struct _Backpack_##name##_2 {                                                \
-    int i1;                                                                    \
-    int i2;                                                                    \
-  };                                                                           \
-                                                                               \
   Piece *internal_##name##_3(Piece *, void *);                                 \
                                                                                \
   Piece *internal_##name##_2(Piece *callee, void *backpack) {                  \
     int *i1 = backpack, *i2 = callee->backpack;                                \
-    struct _Backpack_##name##_2 *pack =                                        \
-        malloc(sizeof(struct _Backpack_##name##_2));                           \
+    BackpackOp2 *pack = malloc(sizeof(BackpackOp2));                           \
     pack->i1 = *i1;                                                            \
     pack->i2 = *i2;                                                            \
     return piece_create(internal_##name##_3, pack);                            \
   }                                                                            \
                                                                                \
   Piece *internal_##name##_3(Piece *callee, void *backpack) {                  \
-    struct _Backpack_##name##_2 *pack = backpack;                              \
+    BackpackOp2 *pack = backpack;                                              \
     return apply(callee, piece_create_##type(pack->i1 op pack->i2));           \
   }
 
-INTERNAL_GENERATE_2(add, +, int)
-INTERNAL_GENERATE_2(sub, -, int)
-INTERNAL_GENERATE_2(mul, *, int)
-INTERNAL_GENERATE_2(div, /, int)
-INTERNAL_GENERATE_2(lt, <, bool)
-INTERNAL_GENERATE_2(eq, ==, bool)
+INTERNAL_GENERATE_OP(add, +, int)
+INTERNAL_GENERATE_OP(sub, -, int)
+INTERNAL_GENERATE_OP(mul, *, int)
+INTERNAL_GENERATE_OP(div, /, int)
+INTERNAL_GENERATE_OP(lt, <, bool)
+INTERNAL_GENERATE_OP(eq, ==, bool)
 
 Piece *internal_end(Piece *callee, void *backpack) { return NULL; }
 

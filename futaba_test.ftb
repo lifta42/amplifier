@@ -1,12 +1,12 @@
 ; main
 `put `+ `- `* `/ `< `= `then `id
   `Y
-    Y `self `n
+    Y `self `n `m
       `keep-going
-        n < 97 ? keep-going 0
+        n < m ? keep-going 0
       ., ; keep-going
-      put n then n + 1, self
-    .. 65 then put 10
+      put n then m, n + 1, self
+    ... 33 127 then put 10
   .
   ; Y
   `f
