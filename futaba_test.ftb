@@ -1,18 +1,21 @@
 ; main
-`flip `const `then
-  `b1 `b2
-    flip < 2 3 ? b1 b2 put
-  ., ; b2
-  48 + 8
-  ., ; b1
-  42
-...
+`put `+ `- `* `/ `< `= `then `id
+  put 42 then put 10
+.........
 
-; flip
-`f `x `y f y x...
+; put + - * / < =
+`x x put.
+`a `b b, a +..
+`a `b b, a -..
+`a `b b, a *..
+`a `b b, a /..
+`a `b b, a <..
+`a `b b, a =..
 
-; const
-`x `y x..
-
-;then
+; then
 `x `y y..
+
+; id
+`x x.
+
+.

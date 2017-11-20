@@ -11,7 +11,8 @@ enum Error {
   ERROR_UNRESOLVED_NAME = 1,
   ERROR_CANNOT_OPEN_FILE,
   ERROR_NO_ARGV,
-  ERROR_UNRECOGNIZED_SYMBOL
+  ERROR_UNRECOGNIZED_SYMBOL,
+  ERROR_UNCOMPLETED_SENTENCE
 };
 
 #define SYNTAX_SENTENCE_END '.'
@@ -223,28 +224,27 @@ Piece *parse_sentence_impl(Source *source, Record *record, Piece *result) {
     source_forward(source);
   }
 
-  if (source_fetch(source) == SYNTAX_COMMENT_HEAD) {
+  switch (source_fetch(source)) {
+  case SYNTAX_COMMENT_HEAD:
     do {
       source_forward(source);
     } while (source_fetch(source) != '\n');
     return parse_sentence_impl(source, record, result);
-  }
-
-  if (source_fetch(source) == SYNTAX_SENTENCE_END ||
-      source_fetch(source) == EOF) {
+  case SYNTAX_SENTENCE_END:
     source_forward(source);
     return result;
-  }
-
-  if (source_fetch(source) == SYNTAX_SENTENCT_BREAK) {
+  case EOF:
+    PARSE_GRUMBLE(source, "uncompleted sentence in ");
+    exit(ERROR_UNCOMPLETED_SENTENCE);
+  case SYNTAX_SENTENCT_BREAK:
     source_forward(source);
     return parse_aggregate_call(result,
                                 parse_sentence_impl(source, record, NULL));
+  default:
+    return parse_sentence_impl(
+        source, record,
+        parse_aggregate_call(result, parse_piece(source, record)));
   }
-
-  return parse_sentence_impl(
-      source, record,
-      parse_aggregate_call(result, parse_piece(source, record)));
 }
 
 Piece *parse_sentence(Source *source, Record *record) {
@@ -253,6 +253,7 @@ Piece *parse_sentence(Source *source, Record *record) {
 
 // Part 2, apply
 Piece *apply(Piece *caller, Piece *callee) {
+  // printf("apply %p %p\n", caller, callee);
   return caller->function(callee, caller->backpack);
 }
 
@@ -275,6 +276,12 @@ Piece *internal_lambda(Piece *callee, void *backpack) {
 Piece *internal_argument(Piece *callee, void *backpack) {
   Piece **pack = backpack;
   return apply(*pack, callee);
+}
+
+Piece *internal_arg_id(Piece *callee, void *backpack) {
+  Piece **piece = callee->backpack;
+  printf("extracted: %p\n", *piece);
+  return *piece;
 }
 
 Piece *internal_put(Piece *callee, void *backpack) {
@@ -389,8 +396,12 @@ int main(int argc, char *argv[]) {
   MAIN_REGISTER_INTERNAL(record, "put", internal_put, NULL);
   MAIN_REGISTER_INTERNAL(record, "+", internal_add, NULL);
   MAIN_REGISTER_INTERNAL(record, "-", internal_sub, NULL);
+  MAIN_REGISTER_INTERNAL(record, "*", internal_mul, NULL);
+  MAIN_REGISTER_INTERNAL(record, "/", internal_div, NULL);
   MAIN_REGISTER_INTERNAL(record, "<", internal_lt, NULL);
+  MAIN_REGISTER_INTERNAL(record, "=", internal_eq, NULL);
   MAIN_REGISTER_INTERNAL(record, "?", internal_if, NULL);
+  MAIN_REGISTER_INTERNAL(record, "arg-id", internal_arg_id, NULL);
 
   Piece *p = parse_sentence(main_create_source(argv[1]), record);
   apply(p, piece_create(internal_end, NULL));
