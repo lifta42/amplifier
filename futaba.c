@@ -15,8 +15,9 @@ enum Error {
 };
 
 #define SYNTAX_SENTENCE_END '.'
-#define SYNTAX_LAMBDA_HEAD '?'
+#define SYNTAX_LAMBDA_HEAD '`'
 #define SYNTAX_SENTENCT_BREAK ','
+#define SYNTAX_COMMENT_HEAD ';'
 
 // `Piece` structure
 // Everything in Futaba is a `Piece`.
@@ -67,56 +68,31 @@ Piece *piece_create_call(Piece *caller, Piece *callee) {
 // Part 1, parser
 // `Table` structure
 // Compile (parse) time helper for linking names and `Piece`s.
-typedef struct {
+typedef struct _Record {
   char *name;
   int name_len;
   Piece *piece;
+  struct _Record *previous;
 } Record;
 
-typedef struct _Table {
-  Record **records;
-  int size; // varied
-  int length;
-  struct _Table *upper;
-} Table;
-
-#define TABLE_INIT_SIZE 16
-
-Table *table_create(Table *upper) {
-  Table *table = malloc(sizeof(Table));
-  table->records = malloc(sizeof(Record *) * TABLE_INIT_SIZE);
-  table->size = TABLE_INIT_SIZE;
-  table->length = 0;
-  table->upper = upper;
-  return table;
-}
-
-Piece *table_resolve(Table *table, char *name, int name_len) {
-  if (table == NULL) {
+Piece *record_resolve(Record *record, char *name, int name_len) {
+  if (record == NULL) {
     return NULL;
   }
-  for (int i = 0; i < table->length; i++) {
-    if (name_len != table->records[i]->name_len) {
-      continue;
-    }
-    if (strncmp(table->records[i]->name, name, name_len) == 0) {
-      return table->records[i]->piece;
-    }
+  if (name_len == record->name_len &&
+      strncmp(record->name, name, name_len) == 0) {
+    return record->piece;
   }
-  return table_resolve(table->upper, name, name_len);
+  return record_resolve(record->previous, name, name_len);
 }
 
-void table_register(Table *table, char *name, int name_len, Piece *piece) {
-  if (table->length == table->size) {
-    table->size *= 2;
-    table->records = realloc(table, sizeof(Record *) * table->size);
-  }
+Record *record_register(Record *pre, char *name, int name_len, Piece *piece) {
   Record *record = malloc(sizeof(Record));
   record->name = name;
   record->name_len = name_len;
   record->piece = piece;
-  table->records[table->length] = record;
-  table->length++;
+  record->previous = pre;
+  return record;
 }
 
 // `Source` structure
@@ -191,10 +167,10 @@ Piece *parse_int(Source *source) {
   return piece_create_int(num);
 }
 
-Piece *parse_name(Source *source, Table *table) {
+Piece *parse_name(Source *source, Record *record) {
   int name_len;
   char *name = parse_cover_name(source, &name_len);
-  Piece *piece = table_resolve(table, name, name_len);
+  Piece *piece = record_resolve(record, name, name_len);
   if (piece == NULL) {
     PARSE_GRUMBLE(source, "unresolved name \"%.*s\" near ", name_len, name);
     exit(ERROR_UNRESOLVED_NAME);
@@ -202,7 +178,7 @@ Piece *parse_name(Source *source, Table *table) {
   return piece;
 }
 
-Piece *parse_sentence(Source *, Table *);
+Piece *parse_sentence(Source *, Record *);
 
 typedef struct {
   Piece *body;
@@ -212,7 +188,7 @@ typedef struct {
 Piece *internal_lambda(Piece *, void *);
 Piece *internal_argument(Piece *, void *);
 
-Piece *parse_lambda(Source *source, Table *table) {
+Piece *parse_lambda(Source *source, Record *record) {
   source_forward(source);
 
   BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
@@ -221,21 +197,20 @@ Piece *parse_lambda(Source *source, Table *table) {
 
   int name_len;
   char *name = parse_cover_name(source, &name_len);
-  Table *t = table_create(table);
-  table_register(table, name, name_len,
-                 piece_create(internal_argument, backpack->arg));
+  Record *r = record_register(record, name, name_len,
+                              piece_create(internal_argument, backpack->arg));
 
-  backpack->body = parse_sentence(source, table);
+  backpack->body = parse_sentence(source, r);
   return piece_create(internal_lambda, backpack);
 }
 
-Piece *parse_piece(Source *source, Table *table) {
+Piece *parse_piece(Source *source, Record *record) {
   if (isdigit(source_fetch(source))) {
     return parse_int(source);
-  } else if (source_fetch(source) == '?') {
-    return parse_lambda(source, table);
+  } else if (source_fetch(source) == SYNTAX_LAMBDA_HEAD) {
+    return parse_lambda(source, record);
   } else if (isgraph(source_fetch(source))) {
-    return parse_name(source, table);
+    return parse_name(source, record);
   } else {
     PARSE_GRUMBLE(source, "unrecognized symbol near \'0x%x\' at ",
                   source_fetch(source) & 0xff);
@@ -243,29 +218,37 @@ Piece *parse_piece(Source *source, Table *table) {
   }
 }
 
-Piece *parse_sentence_impl(Source *source, Table *table, Piece *big,
-                           Piece *small) {
+Piece *parse_sentence_impl(Source *source, Record *record, Piece *result) {
   while (isspace(source_fetch(source))) {
     source_forward(source);
+  }
+
+  if (source_fetch(source) == SYNTAX_COMMENT_HEAD) {
+    do {
+      source_forward(source);
+    } while (source_fetch(source) != '\n');
+    return parse_sentence_impl(source, record, result);
   }
 
   if (source_fetch(source) == SYNTAX_SENTENCE_END ||
       source_fetch(source) == EOF) {
     source_forward(source);
-    return parse_aggregate_call(big, small);
-  } else if (source_fetch(source) == SYNTAX_SENTENCT_BREAK) {
+    return result;
+  }
+
+  if (source_fetch(source) == SYNTAX_SENTENCT_BREAK) {
     source_forward(source);
-    return parse_sentence_impl(source, table, parse_aggregate_call(big, small),
-                               NULL);
+    return parse_aggregate_call(result,
+                                parse_sentence_impl(source, record, NULL));
   }
 
   return parse_sentence_impl(
-      source, table, big,
-      parse_aggregate_call(small, parse_piece(source, table)));
+      source, record,
+      parse_aggregate_call(result, parse_piece(source, record)));
 }
 
-Piece *parse_sentence(Source *source, Table *table) {
-  return parse_sentence_impl(source, table, NULL, NULL);
+Piece *parse_sentence(Source *source, Record *record) {
+  return parse_sentence_impl(source, record, NULL);
 }
 
 // Part 2, apply
@@ -340,7 +323,6 @@ Piece *internal_end(Piece *callee, void *backpack) { return NULL; }
 Piece *internal_if_2(Piece *, void *);
 
 Piece *internal_if(Piece *callee, void *backpack) {
-  printf("if\n");
   return piece_create(internal_if_2, callee->backpack);
 }
 
@@ -352,7 +334,6 @@ typedef struct {
 Piece *internal_if_3(Piece *, void *);
 
 Piece *internal_if_2(Piece *callee, void *backpack) {
-  printf("if2\n");
   bool *p_b = backpack;
   BackpackIf2 *pack = malloc(sizeof(BackpackIf2));
   pack->left = callee;
@@ -362,7 +343,6 @@ Piece *internal_if_2(Piece *callee, void *backpack) {
 
 Piece *internal_if_3(Piece *callee, void *backpack) {
   BackpackIf2 *pack = backpack;
-  printf("if3 cond: %d\n", pack->cond);
   return pack->cond ? pack->left : callee;
 }
 
@@ -395,8 +375,9 @@ Source *main_create_source(char *file_name) {
   return source_create(source, length, file_name);
 }
 
-#define MAIN_REGISTER_INTERNAL(table, name, func, backpack)                    \
-  table_register(table, name, sizeof(name) - 1, piece_create(func, backpack))
+#define MAIN_REGISTER_INTERNAL(record, name, func, backpack)                   \
+  record = record_register(record, name, sizeof(name) - 1,                     \
+                           piece_create(func, backpack))
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -404,13 +385,13 @@ int main(int argc, char *argv[]) {
     exit(ERROR_NO_ARGV);
   }
 
-  Table *table = table_create(NULL);
-  MAIN_REGISTER_INTERNAL(table, "put", internal_put, NULL);
-  MAIN_REGISTER_INTERNAL(table, "+", internal_add, NULL);
-  MAIN_REGISTER_INTERNAL(table, "-", internal_sub, NULL);
-  MAIN_REGISTER_INTERNAL(table, "<", internal_lt, NULL);
-  MAIN_REGISTER_INTERNAL(table, "if", internal_if, NULL);
+  Record *record = NULL;
+  MAIN_REGISTER_INTERNAL(record, "put", internal_put, NULL);
+  MAIN_REGISTER_INTERNAL(record, "+", internal_add, NULL);
+  MAIN_REGISTER_INTERNAL(record, "-", internal_sub, NULL);
+  MAIN_REGISTER_INTERNAL(record, "<", internal_lt, NULL);
+  MAIN_REGISTER_INTERNAL(record, "?", internal_if, NULL);
 
-  Piece *p = parse_sentence(main_create_source(argv[1]), table);
+  Piece *p = parse_sentence(main_create_source(argv[1]), record);
   apply(p, piece_create(internal_end, NULL));
 }

@@ -1,3 +1,18 @@
-?a ?b ?c
-  a < 42 if b c put
-... 30, 48 + 5, 48 + 8
+; main
+`flip `const `then
+  `b1 `b2
+    flip < 2 3 ? b1 b2 put
+  ., ; b2
+  48 + 8
+  ., ; b1
+  42
+...
+
+; flip
+`f `x `y f y x...
+
+; const
+`x `y x..
+
+;then
+`x `y y..
