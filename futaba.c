@@ -385,13 +385,14 @@ Source *main_create_source(char *file_name) {
   int length = 0;
   while (true) {
     char *line = NULL;
-    int line_len = 0;
-    line_len = (int)getline(&line, (size_t *)&line_len, source_file);
+    size_t trivial_length = 0;
+    int line_len = getline(&line, &trivial_length, source_file);
     if (line_len < 0) {
       break;
     }
     if (source == NULL) {
-      source = line;
+      source = malloc(sizeof(char) * (line_len + 1));
+      strcpy(source, line);
     } else {
       source = realloc(source, sizeof(char) * (length + line_len + 1));
       strcat(source, line);
@@ -405,8 +406,7 @@ Source *main_create_source(char *file_name) {
 
 #define MAIN_REGISTER_INTERNAL(record, name, func)                             \
   record = record_register(record, name, sizeof(name) - 1,                     \
-                           piece_create(func, NULL));                          \
-  printf("%p %p\n", record, record->previous);
+                           piece_create(func, NULL));
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -426,11 +426,8 @@ int main(int argc, char *argv[]) {
   MAIN_REGISTER_INTERNAL(r, "=", internal_eq);
   MAIN_REGISTER_INTERNAL(r, "?", internal_if);
   MAIN_REGISTER_INTERNAL(r, "nil", internal_self);
-  printf("main %p\n", r);
 
   Source *s = main_create_source(argv[1]);
-
-  printf("main %p\n", r);
   Piece *p = parse_sentence(s, r);
   // source_destory(s);
   // record_destory(r);
