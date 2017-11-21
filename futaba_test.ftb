@@ -1,19 +1,9 @@
 ; main
-`put `+ `- `* `/ `< `= `then `id
-  `Y
-    Y `self `n `m
-      `keep-going
-        n < m ? keep-going 0
-      ., ; keep-going
-      put n then m, n + 1, self
-    ... 33 127 then put 10
-  .
-  ; Y
-  `f
-    `x f, x x.
-    `x f, x x.
-  .
-.........
+`put `+ `- `* `/ `< `= `then `id `Y `cons `car `cdr
+  `list
+    put, car, cdr list
+  ., cons 42, cons 65, cons 44, nil
+.............
 
 ; put + - * / < =
 `x x put.
@@ -30,7 +20,15 @@
 ; id
 `x x.
 
-; true false
+; Y
+`f
+  `x f, x x.
+  `x f, x x.
+.
 
+; cons car cdr
+`h `t `f f h t...
+`l l `h `t h.. .
+`l l `h `t t.. .
 
 .

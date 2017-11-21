@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "gc.h"
+
 // Part 0, preparation
 enum Error {
   ERROR_UNRESOLVED_NAME = 1,
@@ -80,12 +82,14 @@ typedef struct _Record {
 } Record;
 
 Piece *record_resolve(Record *record, char *name, int name_len) {
+  // printf("record %p previous %p\n", record, record->previous);
   if (record == NULL) {
     // there's no enough info about source code, so let parent to raise error
     return NULL;
   }
   if (name_len == record->name_len &&
       strncmp(record->name, name, name_len) == 0) {
+    // printf("\n");
     return record->piece;
   }
   return record_resolve(record->previous, name, name_len);
@@ -213,13 +217,15 @@ Piece *parse_lambda(Source *source, Record *record) {
 
   // `hold` will be filled per invoking
   Piece *hold = piece_create(NULL, NULL);
+  // printf("lambda %p\n", record);
   Record *r = record_register(record, name, name_len, hold);
+  // printf("lambda %p %p\n", r, r->previous);
 
   BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
   backpack->body = parse_sentence(source, r);
   backpack->arg = hold;
 
-  free(r);
+  // free(r);
   return piece_create(internal_lambda, backpack);
 }
 
@@ -259,6 +265,7 @@ Piece *parse_sentence_impl(Source *source, Record *record, Piece *result) {
     return parse_aggregate_call(result,
                                 parse_sentence_impl(source, record, NULL));
   default:
+    // printf("sent %p\n", record);
     return parse_sentence_impl(
         source, record,
         parse_aggregate_call(result, parse_piece(source, record)));
@@ -388,7 +395,7 @@ Source *main_create_source(char *file_name) {
     } else {
       source = realloc(source, sizeof(char) * (length + line_len + 1));
       strcat(source, line);
-      free(line);
+      // free(line);
     }
     length += line_len;
   }
@@ -396,9 +403,10 @@ Source *main_create_source(char *file_name) {
   return source_create(source, length, file_name);
 }
 
-#define MAIN_REGISTER_INTERNAL(record, name, func, backpack)                   \
+#define MAIN_REGISTER_INTERNAL(record, name, func)                             \
   record = record_register(record, name, sizeof(name) - 1,                     \
-                           piece_create(func, backpack))
+                           piece_create(func, NULL));                          \
+  printf("%p %p\n", record, record->previous);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -406,20 +414,26 @@ int main(int argc, char *argv[]) {
     exit(ERROR_NO_ARGV);
   }
 
+  // GC_init();
+
   Record *r = NULL;
-  MAIN_REGISTER_INTERNAL(r, "put", internal_put, NULL);
-  MAIN_REGISTER_INTERNAL(r, "+", internal_add, NULL);
-  MAIN_REGISTER_INTERNAL(r, "-", internal_sub, NULL);
-  MAIN_REGISTER_INTERNAL(r, "*", internal_mul, NULL);
-  MAIN_REGISTER_INTERNAL(r, "/", internal_div, NULL);
-  MAIN_REGISTER_INTERNAL(r, "<", internal_lt, NULL);
-  MAIN_REGISTER_INTERNAL(r, "=", internal_eq, NULL);
-  MAIN_REGISTER_INTERNAL(r, "?", internal_if, NULL);
+  MAIN_REGISTER_INTERNAL(r, "put", internal_put);
+  MAIN_REGISTER_INTERNAL(r, "+", internal_add);
+  MAIN_REGISTER_INTERNAL(r, "-", internal_sub);
+  MAIN_REGISTER_INTERNAL(r, "*", internal_mul);
+  MAIN_REGISTER_INTERNAL(r, "/", internal_div);
+  MAIN_REGISTER_INTERNAL(r, "<", internal_lt);
+  MAIN_REGISTER_INTERNAL(r, "=", internal_eq);
+  MAIN_REGISTER_INTERNAL(r, "?", internal_if);
+  MAIN_REGISTER_INTERNAL(r, "nil", internal_self);
+  printf("main %p\n", r);
 
   Source *s = main_create_source(argv[1]);
+
+  printf("main %p\n", r);
   Piece *p = parse_sentence(s, r);
-  source_destory(s);
-  record_destory(r);
-  
+  // source_destory(s);
+  // record_destory(r);
+
   apply(p, piece_create(internal_end, NULL));
 }
