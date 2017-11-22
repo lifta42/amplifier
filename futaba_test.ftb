@@ -1,9 +1,24 @@
+; futaba_test.ftb
+; A playground for testing Futaba's features.
+
 ; main
-`put `+ `- `* `/ `< `= `then `id `Y `cons `car `cdr
-  `list
-    put, car, cdr list
-  ., cons 42, cons 65, cons 44, nil
-.............
+`put `+ `- `* `/ `< `= `then `Y `cons `car `cdr
+  `print-range
+    `[A `Z)
+      print-range [A Z) then put 10
+    .. 65, 65 + 26
+  ., ; print-range
+  Y `self `n `m
+    `keep
+      n < m ? keep 0
+    .,
+    ; keep
+    n + 1, `n1
+    `next& next&, self n1 m., `next
+      put n then next
+    ..
+  ...
+............
 
 ; put + - * / < =
 `x x put.
@@ -16,9 +31,6 @@
 
 ; then
 `x `y y..
-
-; id
-`x x.
 
 ; Y
 `f

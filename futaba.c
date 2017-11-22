@@ -7,6 +7,8 @@
 #include <string.h>
 
 #include "gc.h"
+#define malloc GC_malloc
+#define realloc GC_realloc
 
 // Part 0, preparation
 enum Error {
@@ -82,14 +84,12 @@ typedef struct _Record {
 } Record;
 
 Piece *record_resolve(Record *record, char *name, int name_len) {
-  // printf("record %p previous %p\n", record, record->previous);
   if (record == NULL) {
     // there's no enough info about source code, so let parent to raise error
     return NULL;
   }
   if (name_len == record->name_len &&
       strncmp(record->name, name, name_len) == 0) {
-    // printf("\n");
     return record->piece;
   }
   return record_resolve(record->previous, name, name_len);
@@ -102,13 +102,6 @@ Record *record_register(Record *pre, char *name, int name_len, Piece *piece) {
   record->piece = piece;
   record->previous = pre;
   return record;
-}
-
-void record_destory(Record *r) {
-  if (r != NULL) {
-    record_destory(r->previous);
-    free(r);
-  }
 }
 
 // `Source` structure
@@ -147,11 +140,6 @@ Source *source_create(char *s, int len, char *file_name) {
   source->current = 0;
   source->line = source->column = 1;
   return source;
-}
-
-void source_destory(Source *s) {
-  free(s->source);
-  free(s);
 }
 
 // parser utils
@@ -217,15 +205,11 @@ Piece *parse_lambda(Source *source, Record *record) {
 
   // `hold` will be filled per invoking
   Piece *hold = piece_create(NULL, NULL);
-  // printf("lambda %p\n", record);
   Record *r = record_register(record, name, name_len, hold);
-  // printf("lambda %p %p\n", r, r->previous);
 
   BackpackLambda *backpack = malloc(sizeof(BackpackLambda));
   backpack->body = parse_sentence(source, r);
   backpack->arg = hold;
-
-  // free(r);
   return piece_create(internal_lambda, backpack);
 }
 
@@ -265,7 +249,6 @@ Piece *parse_sentence_impl(Source *source, Record *record, Piece *result) {
     return parse_aggregate_call(result,
                                 parse_sentence_impl(source, record, NULL));
   default:
-    // printf("sent %p\n", record);
     return parse_sentence_impl(
         source, record,
         parse_aggregate_call(result, parse_piece(source, record)));
@@ -396,7 +379,6 @@ Source *main_create_source(char *file_name) {
     } else {
       source = realloc(source, sizeof(char) * (length + line_len + 1));
       strcat(source, line);
-      // free(line);
     }
     length += line_len;
   }
@@ -414,7 +396,7 @@ int main(int argc, char *argv[]) {
     exit(ERROR_NO_ARGV);
   }
 
-  // GC_init();
+  GC_init();
 
   Record *r = NULL;
   MAIN_REGISTER_INTERNAL(r, "put", internal_put);
@@ -427,10 +409,6 @@ int main(int argc, char *argv[]) {
   MAIN_REGISTER_INTERNAL(r, "?", internal_if);
   MAIN_REGISTER_INTERNAL(r, "nil", internal_self);
 
-  Source *s = main_create_source(argv[1]);
-  Piece *p = parse_sentence(s, r);
-  // source_destory(s);
-  // record_destory(r);
-
-  apply(p, piece_create(internal_end, NULL));
+  apply(parse_sentence(main_create_source(argv[1]), r),
+        piece_create(internal_end, NULL));
 }
