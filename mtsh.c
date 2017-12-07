@@ -9,13 +9,15 @@
 
 
 // I hate SHOUT_OFF_LIKE_THIS.
-#define perference_jigsaw_initial_room 32
-#define perference_warehouse_initial_size 128
+// Use `const int` instead of `#define` so that clang-format will align them.
+const int perference_jigsaw_initial_room             = 32;
+const int perference_warehouse_initial_size          = 128;
+const int perference_debug_source_content_max_length = 32;
 
 
 #ifndef NDEBUG
 #define write_log(indent, message...)                                          \
-  fprintf(stderr, "[debug] %*s", indent * 2, "");                              \
+  fprintf(stderr, "[debug] %*s", (indent)*2, "");                              \
   fprintf(stderr, message);                                                    \
   fprintf(stderr, "\n")
 #else
@@ -56,11 +58,20 @@ typedef struct
   Warehouse *warehouse;
 } Jigsaw;
 
+void debug_jigsaw(int indent, Jigsaw *jigsaw)
+{
+  write_log(indent, "jigsaw at %p", jigsaw);
+  write_log(indent + 1, "pieces buffer: %p capacity: %d allocated: %d",
+            jigsaw->pieces, jigsaw->capacity, jigsaw->allocated);
+  write_log(indent + 1, "warehouse(%p) status", jigsaw->warehouse);
+  write_log(indent + 2, "backpack buffer: %p, capacity: %d allocated: %d",
+            jigsaw->warehouse->memory, jigsaw->warehouse->capacity,
+            jigsaw->warehouse->allocated);
+}
+
 Jigsaw *jigsaw_create()
 {
   write_log(0, "creating jigsaw");
-  write_log(1, "jigsaw rooms: %d", perference_jigsaw_initial_room);
-  write_log(1, "warehouse size: %d", perference_warehouse_initial_size);
 
   Warehouse *warehouse = malloc(sizeof(Warehouse));
   assert(warehouse != NULL);
@@ -78,19 +89,9 @@ Jigsaw *jigsaw_create()
   jigsaw->allocated = 0;
   jigsaw->warehouse = warehouse;
 
-  write_log(0, "created jigsaw at %p", jigsaw);
+  write_log(0, "created jigsaw:");
+  debug_jigsaw(1, jigsaw);
   return jigsaw;
-}
-
-void debug_jigsaw(int indent, Jigsaw *jigsaw)
-{
-  write_log(indent, "jigsaw at %p", jigsaw);
-  write_log(indent + 1, "pieces buffer: %p capacity: %d allocated: %d",
-            jigsaw->pieces, jigsaw->capacity, jigsaw->allocated);
-  write_log(indent + 1, "warehouse(%p) status", jigsaw->warehouse);
-  write_log(indent + 2, "backpack buffer: %p, capacity: %d allocated: %d",
-            jigsaw->warehouse->memory, jigsaw->warehouse->capacity,
-            jigsaw->warehouse->allocated);
 }
 
 Piece *piece_allocate(Jigsaw *jigsaw, int backpack_size)
@@ -111,9 +112,8 @@ Piece *piece_allocate(Jigsaw *jigsaw, int backpack_size)
   return piece;
 }
 
-Piece *piece_initialize_impl(Jigsaw *jigsaw, PieceMethod *method,
-                             DropMethod *drop, int backpack_size,
-                             void *backpack)
+Piece *piece_create_impl(Jigsaw *jigsaw, PieceMethod *method, DropMethod *drop,
+                         int backpack_size, void *backpack)
 {
   write_log(0, "initializing piece with pack_size: %d", backpack_size);
   Piece *piece  = piece_allocate(jigsaw, backpack_size);
@@ -125,8 +125,8 @@ Piece *piece_initialize_impl(Jigsaw *jigsaw, PieceMethod *method,
   return piece;
 }
 
-#define piece_initialize(jigsaw, method, drop, pack)                           \
-  piece_initialize_impl(jigsaw, method, drop, sizeof(*pack), pack)
+#define piece_create(jigsaw, method, drop, pack)                               \
+  piece_create_impl(jigsaw, method, drop, sizeof(*pack), pack)
 
 void piece_hold(Piece *holdee, Piece *holder)
 {
@@ -144,7 +144,10 @@ void piece_giveup(Piece *piece)
   if (piece->refcount == 0)
   {
     write_log(1, "no one holds this piece, discarding it");
-    piece->drop(piece->backpack);
+    if (piece->drop != NULL)
+    {
+      piece->drop(piece->backpack);
+    }
     // TODO: mark its place as usable
   }
 }
@@ -158,6 +161,116 @@ Piece *apply(Piece *caller, Piece *callee)
 
 typedef struct
 {
+  char *buffer;
+  int offset;
+  int line;
+  int column;
+  int length;
+} Source;
+
+Source *source_create(char *buffer, int length)
+{
+  Source *source = malloc(sizeof(Source));
+  source->buffer = buffer;
+  source->length = length;
+  source->offset = 0;
+  source->line = source->column = 1;
+  return source;
+}
+
+bool source_forward(Source *source)
+{
+  if (source->offset == source->length)
+  {
+    return false;
+  }
+  if (source->buffer[source->offset] == '\n')
+  {
+    source->line++;
+    source->column = 1;
+  }
+  else
+  {
+    source->column++;
+  }
+  source->offset++;
+  return true;
+}
+
+// Fetching from `source` does not have to invoking this.
+char source_peek(Source *source)
+{
+  assert(source->offset >= 0 && source->offset < source->length);
+  return source->buffer[source->offset];
+}
+
+typedef struct _Register
+{
+  char *name;
+  int name_length;
+  Piece *piece;
+  struct _Register *upper;
+} Register;
+
+void debug_source(int indent, Source *source)
+{
+  write_log(indent, "source(%p) {", source);
+  write_log(indent + 1, "line: %d, column: %d,", source->line, source->column);
+
+  int remain_length = source->length - source->offset;
+  int log_length    = perference_debug_source_content_max_length;
+  char *yadda       = "...";
+  if (remain_length < log_length)
+  {
+    log_length = remain_length;
+    yadda      = "";
+  }
+  write_log(indent + 1, "content: \"%.*s%s\"", log_length, source->buffer,
+            yadda);
+  write_log(indent, "}");
+}
+
+Register *register_create_impl(char *name, int name_length, Piece *piece,
+                               Register *upper)
+{
+  Register *reg    = malloc(sizeof(Register));
+  reg->name        = name;
+  reg->name_length = name_length;
+  reg->piece       = piece;
+  reg->upper       = upper;
+  return reg;
+}
+
+// This `name` must be a string literal.
+#define register_create(name, piece, upper)                                    \
+  register_create_impl(name, sizeof(name), piece, upper)
+
+Piece *register_resolve(Register *reg, Source *source)
+{
+  write_log(0, "resolving name in register %p", reg);
+  if (reg == NULL)
+  {
+    write_log(1, "fail to resolve name for:");
+    debug_source(2, source);
+    return NULL;
+  }
+
+  if (strncmp(&source->buffer[source->offset], reg->name, reg->name_length) ==
+      0)
+  {
+    write_log(1, "name %.*s match piece %p", reg->name_length, reg->name,
+              reg->piece);
+    return reg->piece;
+  }
+  else
+  {
+    return register_resolve(reg->upper, source);
+  }
+}
+
+
+typedef struct
+{
   int foo;
   int bar;
 } BackpackFoo;
@@ -166,8 +279,10 @@ int main(int argc, char *argv[])
 {
   Jigsaw *j = jigsaw_create();
   Piece *p =
-      piece_initialize(j, NULL, NULL, (&(BackpackFoo){.foo = 42, .bar = 43}));
-  debug_jigsaw(0, j);
+      piece_create(j, NULL, NULL, (&(BackpackFoo){.foo = 42, .bar = 43}));
   piece_hold(p, NULL);
-  // piece_giveup(p);
+  Register *r = register_create("some-piece", p, NULL);
+  char b[]    = "some-piec154328uhiewubciuqbwndquodhowiadojsancowubeofqowb";
+  Source *s   = source_create(b, sizeof(b));
+  register_resolve(r, s);
 }
