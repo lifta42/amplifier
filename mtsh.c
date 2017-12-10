@@ -2,13 +2,14 @@
 // Mitsuha was created by liftA42 in Nov, 2017, and the interpreter was created
 // by liftA42 on Dec 4, 2017.
 #include <assert.h>
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 
-// I hate SHOUT_OFF_LIKE_THIS.
+// I hate to SHOUT_OFF_LIKE_THIS.
 // Use `const int` instead of `#define` so that clang-format will align them.
 const int perference_jigsaw_initial_room             = 32;
 const int perference_warehouse_initial_size          = 128;
@@ -248,41 +249,81 @@ Register *register_create_impl(char *name, int name_length, Piece *piece,
 Piece *register_resolve(Register *reg, Source *source)
 {
   write_log(0, "resolving name in register %p", reg);
-  if (reg == NULL)
+  Piece *match_piece = NULL;
+  int match_length   = 0;
+  for (Register *reg_iter = reg; reg_iter != NULL; reg_iter = reg_iter->upper)
   {
-    write_log(1, "fail to resolve name for:");
+    int max_length = source->length - source->offset;
+    max_length =
+        max_length > reg_iter->name_length ? reg_iter->name_length : max_length;
+    if (strncmp(&source->buffer[source->offset], reg_iter->name, max_length)
+        == 0)
+    {
+      if (reg_iter->name_length > match_length)
+      {
+        match_piece  = reg_iter->piece;
+        match_length = reg_iter->name_length;
+      }
+    }
+  }
+  if (match_piece == NULL)
+  {
+    write_log(1, "fail to resolve name for source");
     debug_source(2, source);
     return NULL;
   }
-
-  if (strncmp(&source->buffer[source->offset], reg->name, reg->name_length) ==
-      0)
-  {
-    write_log(1, "name %.*s match piece %p", reg->name_length, reg->name,
-              reg->piece);
-    return reg->piece;
-  }
   else
   {
-    return register_resolve(reg->upper, source);
+    write_log(1, "resolved piece %p with matched name %.*s", match_piece,
+              match_length, &source->buffer[source->offset]);
+    for (int i = 0; i < match_length; i++)
+    {
+      source_forward(source);
+    }
+    return match_piece;
   }
 }
 
+Piece *internal_call(Piece *callee, Backpack *backpack) {
+  return NULL;
+}
 
-typedef struct
+typedef struct {
+  Piece *caller;
+  Piece *callee;
+} BackpackCall;
+
+Piece *parse_sentence_impl(Source *source, Register *reg, Jigsaw *jigsaw,
+                           Piece *covered)
 {
-  int foo;
-  int bar;
-} BackpackFoo;
+  while (isspace(source_peek(source)))
+  {
+    if (!source_forward(source))
+    {
+      return NULL;
+    }
+  }
+
+  Piece *piece = register_resolve(reg, source);
+  if (piece == NULL)
+  {
+    return NULL;
+  }
+
+  Piece *call_piece =
+      piece_create(jigsaw, internal_call, NULL,
+                   (&(BackpackCall){.caller = covered, .callee = piece}));
+  piece_hold(call_piece, covered);
+  piece_hold(call_piece, piece);
+  return parse_sentence_impl(source, reg, jigsaw, call_piece);
+}
+
+Piece *parse_sentence(Source *source, Register *reg, Jigsaw *jigsaw)
+{
+  return parse_sentence_impl(source, reg, jigsaw, NULL);
+}
 
 int main(int argc, char *argv[])
 {
-  Jigsaw *j = jigsaw_create();
-  Piece *p =
-      piece_create(j, NULL, NULL, (&(BackpackFoo){.foo = 42, .bar = 43}));
-  piece_hold(p, NULL);
-  Register *r = register_create("some-piece", p, NULL);
-  char b[]    = "some-piec154328uhiewubciuqbwndquodhowiadojsancowubeofqowb";
-  Source *s   = source_create(b, sizeof(b));
-  register_resolve(r, s);
+  //
 }
