@@ -12,13 +12,15 @@
  * Additional callbacks may be set for states. Proper callback will be triggered
  * if the corresponded state is reached.
  */
-
 #ifndef LIFTA42_AUTOMATA_DFA_H
 #define LIFTA42_AUTOMATA_DFA_H
+
+#include <stdbool.h>
 
 typedef int DFAState;
 typedef int DFASymbol;
 
+/** The inner representation of a DFA. */
 typedef struct _DFAuto *DFAuto;  // all-capital seems weird to me
 
 /** Create a new DFA with no state.
@@ -35,6 +37,7 @@ DFAuto dfa_create();
 DFAState dfa_extend(DFAuto dfa);
 
 /** Draw an arrow between two states of a DFA.
+
 After this invoking, `dfa` will jump from `from` state to `to` state when `with`
 symbol is received.
 
@@ -44,7 +47,8 @@ Connecting states that not exists will cause error.
 \param from the source state of jumping
 \param with the symbol that causes jumping
 \param to the destined state of jumping */
-void dfa_connect(DFAuto dfa, DFAState from, DFASymbol with, DFAState to);
+void dfa_connect(DFAuto dfa, const DFAState from, const DFASymbol with,
+                 const DFAState to);
 
 /** Similiar to `dfa_connect`, only the jumping will occur if none of any
 existing symbol matches the received one.
@@ -52,6 +56,45 @@ existing symbol matches the received one.
 \param dfa the modified DFA
 \param from the source state of jumping
 \param to the destined state of jumping */
-void dfa_connect_fallback(DFAuto dfa, DFAState from, DFAState to);
+void dfa_connect_fallback(DFAuto dfa, const DFAState from, const DFAState to);
+
+/** Set a state as acceptable state of a DFA.
+
+Passing a non-existent state will cause error.
+
+\param dfa the modified DFA
+\param state the acceptable state */
+void dfa_accept(DFAuto dfa, const DFAState state);
+
+
+/** The inner representation of an instance of a DFA.
+
+Multiple instances of a DFA may be created, each of them executes separately,
+and leave the original `DFAuto` unchanged. */
+typedef struct _DFAInstance *DFAInstance;
+
+/** Create a `DFAInstance` with a `DFA` and starting state.
+
+Different instances of the same DFA may start executing from vary states.
+
+\param dfa the frozen DFA
+\param start the start state of `dfa`
+\return The created `DFAInstance` object. */
+DFAInstance dfa_freeze(const DFAuto dfa, const DFAState start);
+
+/** Send a symbol into a DFA instance and let it transition.
+
+An error will be raised if there's no outgoing arrow matching passed symbol.
+
+\param instance the modified DFA instance
+\param symbol the sent symbol */
+void dfa_send(DFAInstance instance, const DFASymbol symbol);
+
+/** Check whether a DFA instance is on an acceptable state.
+
+\param instance the checked DFA instance
+\return The result is `ture` if the passed DFA instance is on an acceptable
+state. */
+bool dfa_acceptable(const DFAInstance instance);
 
 #endif

@@ -6,6 +6,7 @@ AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: None
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Allman
+MaxEmptyLinesToKeep: 2
 ReflowComments: false
 SpacesBeforeTrailingComments: 2
 ...
