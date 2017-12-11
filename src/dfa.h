@@ -1,6 +1,8 @@
 /**
  * \file dfa.h
  * \brief A simple implementation of determine finite automata.
+ * \author liftA42
+ * \date Dec 10, 2017
  *
  * A DFA is built up with several states and a transition function. The function
  * accepts a state and a symbol as its arguments, and returns another state.
@@ -28,7 +30,7 @@ typedef struct _DFAuto *DFAuto;  // all-capital seems weird to me
 Invoking `dfa_work` directly on its result will cause error.
 
 \return An empty DFA. */
-DFAuto dfa_create();
+DFAuto dfa_create(void);
 
 /** Create a new state node in a DFA.
 
@@ -66,6 +68,11 @@ Passing a non-existent state will cause error.
 \param state the acceptable state */
 void dfa_accept(DFAuto dfa, const DFAState state);
 
+/** Free a DFA.
+
+\param dfa the freed DFA */
+void dfa_destroy(DFAuto dfa);
+
 
 /** The inner representation of an instance of a DFA.
 
@@ -96,5 +103,10 @@ void dfa_send(DFAInstance instance, const DFASymbol symbol);
 \return The result is `ture` if the passed DFA instance is on an acceptable
 state. */
 bool dfa_acceptable(const DFAInstance instance);
+
+/** Free a DFA instance.
+
+\param instance the freed DFA instance */
+void dfa_destory_instance(DFAInstance instance);
 
 #endif
