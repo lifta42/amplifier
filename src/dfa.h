@@ -78,7 +78,7 @@ void dfa_destroy(DFAuto dfa);
 
 Multiple instances of a DFA may be created, each of them executes separately,
 and leave the original `DFAuto` unchanged. */
-typedef struct _DFAInstance *DFAInstance;
+typedef struct _DFAInst *DFAInst;
 
 /** Create a `DFAInstance` with a `DFA` and starting state.
 
@@ -87,7 +87,7 @@ Different instances of the same DFA may start executing from vary states.
 \param dfa the frozen DFA
 \param start the start state of `dfa`
 \return The created `DFAInstance` object. */
-DFAInstance dfa_freeze(const DFAuto dfa, const DFAState start);
+DFAInst dfa_freeze(const DFAuto dfa, const DFAState start);
 
 /** Send a symbol into a DFA instance and let it transition.
 
@@ -95,18 +95,18 @@ An error will be raised if there's no outgoing arrow matching passed symbol.
 
 \param instance the modified DFA instance
 \param symbol the sent symbol */
-void dfa_send(DFAInstance instance, const DFASymbol symbol);
+void dfa_send(DFAInst instance, const DFASymbol symbol);
 
 /** Check whether a DFA instance is on an acceptable state.
 
 \param instance the checked DFA instance
 \return The result is `ture` if the passed DFA instance is on an acceptable
 state. */
-bool dfa_acceptable(const DFAInstance instance);
+bool dfa_acceptable(const DFAInst instance);
 
 /** Free a DFA instance.
 
 \param instance the freed DFA instance */
-void dfa_destory_instance(DFAInstance instance);
+void dfa_destory_inst(DFAInst instance);
 
 #endif
