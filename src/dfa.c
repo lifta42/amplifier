@@ -77,6 +77,7 @@ void dfa_connect(DFAuto dfa, const DFAState from, const DFASymbol with,
   }
   dfa->states[from].records[state_length].symbol = with;
   dfa->states[from].records[state_length].state  = to;
+  dfa->states[from].length++;
 }
 
 void dfa_connect_fallback(DFAuto dfa, const DFAState from, const DFAState to)
