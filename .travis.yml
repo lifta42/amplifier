@@ -2,5 +2,5 @@ language: c
 compiler:
   - clang
   - gcc
-build:
+script:
   - cmake . && make && make test
