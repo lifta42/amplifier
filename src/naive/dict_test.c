@@ -43,7 +43,7 @@ int main()
   }
   {
     const int repeat_time = 1 << 10, inner_time = 1 << 6;
-    const int max_key = 2 << 16, scale = 192;
+    const int max_key = 2 << 16, scale_pow = 9, scale = 1 << scale_pow;
     for (int repeat_count = 0; repeat_count < repeat_time; repeat_count++)
     {
       Dict dict = dict_create(int, double, hash_int, equal_int);
@@ -54,10 +54,9 @@ int main()
       {
         keys[i] = rand() % (max_key / scale) + max_key / scale * i;
       }
-      for (int i = 4; i < 8; i++) {
+      for (int i = 4; i < scale_pow; i++) {
         repeat_random_access(inner_time, dict, 1 << i, keys, values);
       }
-      repeat_random_access(inner_time, dict, scale, keys, values);
       dict_destory(dict);
     }
   }

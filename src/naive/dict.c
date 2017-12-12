@@ -111,12 +111,12 @@ static int find_key(const Dict dict, const void *key, int *fail_at)
 void dict_put(Dict dict, const void *key, const void *value)
 {
   assert(key != NULL);
-  // Extend dictionary here will cause unnecessary extending when update a key
-  // in a full filled dictionary.
-  // But it is faster than current impl, TODO: figure out why.
-  // if (dict->length == dict->capacity) {
-  //   extend(dict);
-  // }
+  if (dict->length
+      == (dict->type == DictTypeLinear ? dict->capacity
+                                       : dict->capacity / 4 * 3))
+  {
+    extend(dict);
+  }
 
   int write_pos;
   int found = find_key(dict, key, &write_pos);
@@ -156,20 +156,31 @@ static void rebuild_dict(const int type, const int capacity, Dict dict)
   rebuilt->capacity = capacity;
   initialize_data(rebuilt);
 
-  for (int i = 0; i < dict->length; i++)
+  if (dict->type == DictTypeLinear)
   {
-    // not reuse `dict_get`, possibly should
-    dict_put(rebuilt, dict->data[i].key, dict->data[i].value);
+    for (int i = 0; i < dict->length; i++)
+    {
+      dict_put(rebuilt, dict->data[i].key, dict->data[i].value);
+    }
+  }
+  else
+  {
+    for (int i = 0; i < dict->capacity; i++)
+    {
+      if (dict->data[i].key != NULL)
+      {
+        dict_put(rebuilt, dict->data[i].key, dict->data[i].value);
+      }
+    }
   }
   memcpy(dict, rebuilt, sizeof(struct _Dict));
 }
 
 static void extend(Dict dict)
 {
-  dict->capacity *= 2;
-  rebuild_dict(dict->capacity < dict_hash_initial ? DictTypeLinear
-                                                  : DictTypeHash,
-               dict->capacity, dict);
+  rebuild_dict(dict->capacity * 2 < dict_hash_initial ? DictTypeLinear
+                                                      : DictTypeHash,
+               dict->capacity * 2, dict);
 }
 
 void *dict_get(const Dict dict, const void *key, void *fail)
