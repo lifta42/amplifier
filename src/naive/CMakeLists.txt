@@ -1,0 +1,3 @@
+set(NAIVE_COLLECTION_MODULES dict)
+
+process_units(naive ${NAIVE_COLLECTION_MODULES})

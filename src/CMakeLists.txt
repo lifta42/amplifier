@@ -13,3 +13,4 @@ function(process_units MODULE_NAME UNITS)
 endfunction()
 
 add_subdirectory(auto)
+add_subdirectory(naive)
