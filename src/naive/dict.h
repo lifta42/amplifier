@@ -76,7 +76,7 @@ dictionary.
 \param key the searched key in `dict`
 \param default_value the default result
 \return The value of `key`, or `default_value` if `key` is not found. */
-void *dict_get(const Dict dict, const void *key, const void *default_value);
+void *dict_get(const Dict dict, const void *key, void *default_value);
 
 /** Release a dict and clean up its memory. */
 void dict_destory(Dict dict);
