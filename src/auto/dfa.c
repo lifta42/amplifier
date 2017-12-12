@@ -27,7 +27,7 @@ struct _DFAuto
 
 DFAuto dfa_create(void)
 {
-  struct _DFAuto *dfa = malloc(sizeof(struct _DFAuto));
+  DFAuto dfa = malloc(sizeof(struct _DFAuto));
   assert(dfa != NULL);
   dfa->state_capacity = 16;
   dfa->states =
@@ -112,7 +112,7 @@ struct _DFAInst
 
 DFAInst dfa_freeze(const DFAuto dfa, const DFAState start)
 {
-  struct _DFAInst *inst = malloc(sizeof(struct _DFAInst));
+  DFAInst inst = malloc(sizeof(struct _DFAInst));
   assert(inst != NULL);
   // Cannot assign directly with `inst->dfa = dfa`, because const member cannot
   // be assigned.

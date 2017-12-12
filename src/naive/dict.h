@@ -14,6 +14,7 @@
 #define LIFTA42_NAIVE_DICT_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef struct _Dict *Dict;
 
@@ -27,38 +28,43 @@ typedef bool(DictEqual)(const void *key1, const void *key2);
 
 \param hash method for hash a key of dict
 \param equal method for compare whether two keys are equal
+\param key_size `sizeof` key type
+\param value_size `sizeof` value type
 \return The created empty dict. */
-Dict dict_create(DictHash hash, DictEqual equal);
+Dict dict_create(DictHash *hash, DictEqual *equal, size_t key_size,
+                 size_t value_size);
 
 /** Naive hash method generator for primitive types. */
 #define dict_gen_hash(name, Type)                                              \
   int name(const void *key, const int range)                                   \
   {                                                                            \
-    Type *raw = key;                                                           \
+    const Type *raw = key;                                                     \
     return (int)(*raw) % range;                                                \
   }
 
-/** Naive equal method generator for primitive types. */
+/** Naive equal method generator for primitive types.
+
+\param name generated method's name
+\param Type the type for which this macro generated
+*/
 #define dict_gen_equal(name, Type)                                             \
   bool name(const void *key1, const void *key2)                                \
   {                                                                            \
-    Type *val1 = *key1, *val2 = *key2;                                         \
+    const Type *val1 = key1, *val2 = key2;                                     \
     return *val1 == *val2;                                                     \
   }
 
 /** Store a key-value pair in a dictionary.
 
 If the key is present in `dict`, then its value will be substituted with
-`value`, and the old value will be returned. Otherwise, a new key-value pair
-will be created in `dict`, and `NULL` will be returned.
+`value`. Otherwise, a new key-value pair will be created in `dict`.
 
 The copies of `key` and `value` will be created and stored in `dict`.
 
 \param dict the modified dictionary
 \param key the manipulated key
-\param value the value of `key`
-\return The old value, or `NULL` if there's no old value. */
-void *dict_put(Dict dict, const void *key, const void *value);
+\param value the value of `key` */
+void dict_put(Dict dict, const void *key, const void *value);
 
 /** Fetch a value of specified key in a dictionary.
 
