@@ -24,6 +24,9 @@ typedef int(DictHash)(const void *key, const int range);
 
 typedef bool(DictEqual)(const void *key1, const void *key2);
 
+Dict dict_create_impl(DictHash *hash, DictEqual *equal, size_t key_size,
+                      size_t value_size);
+
 /** Create a dict with two verbs.
 
 \param hash method for hash a key of dict
@@ -31,8 +34,8 @@ typedef bool(DictEqual)(const void *key1, const void *key2);
 \param key_size `sizeof` key type
 \param value_size `sizeof` value type
 \return The created empty dict. */
-Dict dict_create(DictHash *hash, DictEqual *equal, size_t key_size,
-                 size_t value_size);
+#define dict_create(KeyType, ValueType, hash, equal)                           \
+  dict_create_impl(hash, equal, sizeof(KeyType), sizeof(ValueType))
 
 /** Naive hash method generator for primitive types. */
 #define dict_gen_hash(name, Type)                                              \

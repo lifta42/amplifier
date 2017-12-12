@@ -45,8 +45,8 @@ static void initialize_data(Dict dict)
   memset(dict->data, (int)NULL, data_size);
 }
 
-Dict dict_create(DictHash *hash, DictEqual *equal, size_t key_size,
-                 size_t value_size)
+Dict dict_create_impl(DictHash *hash, DictEqual *equal, size_t key_size,
+                      size_t value_size)
 {
   Dict dict = malloc(sizeof(struct _Dict));
   assert(dict != NULL);
@@ -62,7 +62,6 @@ Dict dict_create(DictHash *hash, DictEqual *equal, size_t key_size,
   return dict;
 }
 
-static void covert(Dict dict);
 static void extend(Dict dict);
 
 static int quad_hash(int h, int i, int m)
@@ -71,34 +70,22 @@ static int quad_hash(int h, int i, int m)
   return (h + i * (i + 1) / 2) % m;
 }
 
-void dict_put(Dict dict, const void *key, const void *value)
+static int find_key(const Dict dict, const void *key, int *fail_at)
 {
-  assert(key != NULL);
-  if (dict->length == dict->capacity)
-  {
-    if (dict->type == DictTypeLinear)
-    {
-      covert(dict);
-    }
-    else
-    {
-      extend(dict);
-    }
-  }
-
-  int write_pos;
   if (dict->type == DictTypeLinear)
   {
     for (int i = 0; i < dict->length; i++)
     {
       if (dict->equal(dict->data[i].key, key))
       {
-        void *old = dict->data[i].value;
-        memcpy(dict->data[i].value, value, dict->value_size);
-        return;
+        return i;
       }
     }
-    write_pos = dict->length;
+    if (fail_at != NULL)
+    {
+      *fail_at = dict->length == dict->capacity ? -1 : dict->length;
+    }
+    return -1;
   }
   else
   {
@@ -108,30 +95,55 @@ void dict_put(Dict dict, const void *key, const void *value)
       int index = quad_hash(hash, i, dict->capacity);
       if (dict->data[index].key == NULL)
       {
-        write_pos = index;
-        break;
+        *fail_at = index;
+        return -1;
       }
-      // Same logic as above. Consider to extract it.
-      else if (dict->equal(dict->data[index].key, key))
+      if (dict->equal(dict->data[index].key, key))
       {
-        void *old = dict->data[index].value;
-        memcpy(dict->data[index].value, value, dict->value_size);
-        return;
+        return index;
       }
     }
-    // It is impossible that neither the data table is full, nor any valid room
-    // for new pair is found.
-    assert(false);
+    *fail_at = -1;
+    return -1;
   }
+}
 
-  // The key is not found in data table, create a new one at proper place.
-  dict->data[write_pos].key = malloc(dict->key_size);
-  assert(dict->data[write_pos].key != NULL);
-  memcpy(dict->data[write_pos].key, key, dict->key_size);
-  dict->data[write_pos].value = malloc(dict->value_size);
-  assert(dict->data[write_pos].value != NULL);
-  memcpy(dict->data[write_pos].value, value, dict->value_size);
-  dict->length++;
+void dict_put(Dict dict, const void *key, const void *value)
+{
+  assert(key != NULL);
+  // Extend dictionary here will cause unnecessary extending when update a key
+  // in a full filled dictionary.
+  // But it is faster than current impl, TODO: figure out why.
+  // if (dict->length == dict->capacity) {
+  //   extend(dict);
+  // }
+
+  int write_pos;
+  int found = find_key(dict, key, &write_pos);
+  if (found != -1)
+  {
+    void *old = dict->data[found].value;
+    memcpy(dict->data[found].value, value, dict->value_size);
+  }
+  else
+  {
+    // The key is not found in data table, create a new one at proper place.
+    if (write_pos == -1)
+    {
+      extend(dict);
+      dict_put(dict, key, value);
+    }
+    else
+    {
+      dict->data[write_pos].key = malloc(dict->key_size);
+      assert(dict->data[write_pos].key != NULL);
+      memcpy(dict->data[write_pos].key, key, dict->key_size);
+      dict->data[write_pos].value = malloc(dict->value_size);
+      assert(dict->data[write_pos].value != NULL);
+      memcpy(dict->data[write_pos].value, value, dict->value_size);
+      dict->length++;
+    }
+  }
 }
 
 static void rebuild_dict(const int type, const int capacity, Dict dict)
@@ -140,6 +152,7 @@ static void rebuild_dict(const int type, const int capacity, Dict dict)
   assert(rebuilt != NULL);
   memcpy(rebuilt, dict, sizeof(struct _Dict));
   rebuilt->type     = type;
+  rebuilt->length   = 0;
   rebuilt->capacity = capacity;
   initialize_data(rebuilt);
 
@@ -153,40 +166,16 @@ static void rebuild_dict(const int type, const int capacity, Dict dict)
 
 static void extend(Dict dict)
 {
-  rebuild_dict(DictTypeHash, dict->capacity * 2, dict);
-}
-
-static void covert(Dict dict)
-{
-  rebuild_dict(DictTypeHash, dict_hash_initial, dict);
+  dict->capacity *= 2;
+  rebuild_dict(dict->capacity < dict_hash_initial ? DictTypeLinear
+                                                  : DictTypeHash,
+               dict->capacity, dict);
 }
 
 void *dict_get(const Dict dict, const void *key, void *fail)
 {
-  if (dict->type == DictTypeLinear)
-  {
-    for (int i = 0; i < dict->length; i++)
-    {
-      if (dict->equal(dict->data[i].key, key))
-      {
-        return dict->data[i].value;
-      }
-    }
-    return fail;
-  }
-  else
-  {
-    int hash = dict->hash(key, dict->capacity);
-    for (int i = 0; i < dict->capacity; i++)
-    {
-      int index = quad_hash(hash, i, dict->capacity);
-      if (dict->equal(dict->data[index].key, key))
-      {
-        return dict->data[index].value;
-      }
-    }
-    return fail;
-  }
+  int pos = find_key(dict, key, NULL);
+  return pos != -1 ? dict->data[pos].value : fail;
 }
 
 void dict_destory(Dict dict)
