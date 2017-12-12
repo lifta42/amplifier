@@ -94,8 +94,9 @@ DFAInst dfa_freeze(const DFAuto dfa, const DFAState start);
 An error will be raised if there's no outgoing arrow matching passed symbol.
 
 \param instance the modified DFA instance
-\param symbol the sent symbol */
-void dfa_send(DFAInst instance, const DFASymbol symbol);
+\param symbol the sent symbol
+\return The state that DFA instance reaches after receiving `symbol`. */
+DFAState dfa_send(DFAInst instance, const DFASymbol symbol);
 
 /** Check whether a DFA instance is on an acceptable state.
 

@@ -27,9 +27,10 @@ int main()
   DFAInst inst = dfa_freeze(dfa, q0);
   int serial[] = {1, 1, 0, 0, 0, 1, 1, 0, 1, 0};
   int accept[] = {0, 0, 0, 0, 0, 1, 1, 1, 1, 1};  // could use `bool`, but ugly
+  int states[] = {q0, q0, q1, q1, q1, q2, q2, q2, q2, q2};
   for (int i = 0; i < sizeof(serial) / sizeof(int); i++)
   {
-    dfa_send(inst, serial[i]);
+    assert(dfa_send(inst, serial[i]) == states[i]);
     assert(dfa_acceptable(inst) == accept[i]);
   }
 

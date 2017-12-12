@@ -121,23 +121,27 @@ DFAInst dfa_freeze(const DFAuto dfa, const DFAState start)
   return inst;
 }
 
-void dfa_send(DFAInst inst, const DFASymbol symbol)
+DFAState dfa_send(DFAInst inst, const DFASymbol symbol)
 {
 
   for (int i = 0; i < inst->dfa->states[inst->current].record_length; i++)
   {
-    if (inst->dfa->states[inst->current].records[i].symbol == symbol) {
+    if (inst->dfa->states[inst->current].records[i].symbol == symbol)
+    {
       inst->current = inst->dfa->states[inst->current].records[i].state;
-      return;
+      return inst->current;
     }
   }
   assert(false);  // no valid transition
+  return -1;      // trivial
 }
 
-bool dfa_acceptable(const DFAInst inst) {
+bool dfa_acceptable(const DFAInst inst)
+{
   return inst->dfa->states[inst->current].acceptable;
 }
 
-void dfa_destory_inst(DFAInst inst) {
+void dfa_destory_inst(DFAInst inst)
+{
   free(inst);
 }

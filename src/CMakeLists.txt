@@ -1,16 +1,15 @@
-set(AUTOMATA_MODULES dfa)
+function(process_units MODULE_NAME UNITS)
+  set(MODULE_SOURCES)
+  foreach(UNIT ${UNITS})
+    list(APPEND MODULE_SOURCES ${UNIT}.c)
 
-function(generate_test MOD)
-  set(TEST_TARGET ${MOD}_test)
-  add_executable(${TEST_TARGET} ${MOD}_test.c)
-  target_link_libraries(${TEST_TARGET} automata)
-  add_test(test_${MOD} ${TEST_TARGET})
+    set(TEST_TARGET ${UNIT}_test)
+    add_executable(${TEST_TARGET} ${UNIT}_test.c)
+    target_link_libraries(${TEST_TARGET} ${MODULE_NAME})
+    add_test(test_${UNIT} ${TEST_TARGET})
+  endforeach()
+
+  add_library(${MODULE_NAME} ${MODULE_SOURCES})
 endfunction()
 
-set(AUTOMATA_SOURCES)
-foreach(MOD ${AUTOMATA_MODULES})
-  list(APPEND AUTOMATA_SOURCES ${MOD}.c)
-  generate_test(${MOD})
-endforeach()
-
-add_library(automata ${AUTOMATA_SOURCES})
+add_subdirectory(auto)
