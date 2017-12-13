@@ -1,10 +1,11 @@
 // Created by liftA42 on Dec 13, 2017.
 #include "panic.h"
-#include <stdlib.h>
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-void panic(const bool assertion, const char *message, ...)
+void panic(const bool assertion,
+                const char *message, ...)
 {
   if (!assertion)
   {
@@ -12,6 +13,8 @@ void panic(const bool assertion, const char *message, ...)
     va_start(vl, message);
     vfprintf(stderr, message, vl);
     va_end(vl);
+
+    fprintf(stderr, "\n");
     exit(1);
   }
 }

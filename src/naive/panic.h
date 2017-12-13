@@ -19,6 +19,9 @@
 /** Exit the program immediately after printing a piece of message if assertion
 fails.
 
+Message style is recommended to all lower case, cause this leads to shorter
+message, which corresponds to design.
+
 \param assertion the judgement of whether everything is ok
 \param message print out if `assertion` evaluates to false
 \param ... variables fills `message` */
