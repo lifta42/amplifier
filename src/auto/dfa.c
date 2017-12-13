@@ -1,4 +1,5 @@
 // Created by liftA42 on Dec 11, 2017.
+#include "../naive/dict.h"
 #include "dfa.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -8,13 +9,7 @@ struct _DFAuto
 {
   struct
   {
-    struct
-    {
-      DFASymbol symbol;
-      DFAState state;
-    } * records;
-    int record_length;
-    int record_capacity;
+    Dict transitions;
     DFAState fallback;
     bool acceptable;
   } * states;
@@ -48,38 +43,28 @@ static void extend_when_necessary(void *memory, int length, int *capacity,
   }
 }
 
+// clang-format off
+static dict_gen_hash(hash_symbol, DFASymbol)
+static dict_gen_equal(equal_symbol, DFASymbol)
+
 DFAState dfa_extend(DFAuto dfa)
+// clang-format on
 {
   extend_when_necessary(dfa->states, dfa->state_count, &dfa->state_capacity,
                         sizeof_field(struct _DFAuto, states));
   // I am regretting for my laziness, that not willing to give the inner struct
   // a name.
-  dfa->states[dfa->state_count].record_capacity = 16;
-  dfa->states[dfa->state_count].records =
-      malloc(sizeof_field(struct _DFAuto, states->records)
-             * dfa->states[dfa->state_count].record_capacity);
-  assert(dfa->states[dfa->state_count].records != NULL);
-  dfa->states[dfa->state_count].record_length = 0;
-  dfa->states[dfa->state_count].fallback      = -1;  // no fallback by default
-  dfa->states[dfa->state_count].acceptable    = false;
+  dfa->states[dfa->state_count].transitions =
+      dict_create(DFASymbol, DFAState, hash_symbol, equal_symbol);
+  dfa->states[dfa->state_count].fallback   = -1;  // no fallback by default
+  dfa->states[dfa->state_count].acceptable = false;
   return dfa->state_count++;
 }
 
 void dfa_connect(DFAuto dfa, const DFAState from, const DFASymbol with,
                  const DFAState to)
 {
-  int state_length = dfa->states[from].record_length;
-  extend_when_necessary(dfa->states[from].records, state_length,
-                        &dfa->states[from].record_capacity,
-                        sizeof_field(struct _DFAuto, states->records));
-
-  for (int i = 0; i < state_length; i++)
-  {
-    assert(dfa->states[from].records[i].symbol != with);
-  }
-  dfa->states[from].records[state_length].symbol = with;
-  dfa->states[from].records[state_length].state  = to;
-  dfa->states[from].record_length++;
+  dict_put(dfa->states[from].transitions, &with, &to);
 }
 
 void dfa_connect_fallback(DFAuto dfa, const DFAState from, const DFAState to)
@@ -97,7 +82,7 @@ void dfa_destroy(DFAuto dfa)
 {
   for (int i = 0; i < dfa->state_count; i++)
   {
-    free(dfa->states[i].records);
+    dict_destory(dfa->states[i].transitions);
   }
   free(dfa->states);
   free(dfa);
@@ -123,17 +108,11 @@ DFAInst dfa_freeze(const DFAuto dfa, const DFAState start)
 
 DFAState dfa_send(DFAInst inst, const DFASymbol symbol)
 {
-
-  for (int i = 0; i < inst->dfa->states[inst->current].record_length; i++)
-  {
-    if (inst->dfa->states[inst->current].records[i].symbol == symbol)
-    {
-      inst->current = inst->dfa->states[inst->current].records[i].state;
-      return inst->current;
-    }
-  }
-  assert(false);  // no valid transition
-  return -1;      // trivial
+  DFAState *dest =
+      dict_get(inst->dfa->states[inst->current].transitions, &symbol, NULL);
+  assert(dest != NULL);  // no valid transition
+  inst->current = *dest;
+  return inst->current;
 }
 
 bool dfa_acceptable(const DFAInst inst)
