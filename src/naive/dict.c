@@ -4,8 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-const int dict_initial      = 16;
-const int dict_hash_initial = 16;
+static const int dict_initial      = 16;
+static const int dict_hash_initial = 32;
+static const int dict_hash_longest = 4;
+#define dict_initial_type DictTypeLinear
+
 
 struct _Dict
 {
@@ -31,6 +34,7 @@ struct _Dict
   size_t value_size;
 };
 
+
 #define sizeof_field(s, m) (sizeof((((s *)0)->m)))
 #define sizeof_field_p(s, pm) (sizeof(*(((s *)0)->pm)))
 
@@ -52,8 +56,7 @@ Dict dict_create_impl(DictHash *hash, DictEqual *equal, size_t key_size,
   assert(dict != NULL);
   dict->hash  = hash;
   dict->equal = equal;
-  // dict->type     = DictTypeLinear;
-  dict->type     = DictTypeHash;
+  dict->type     = dict_initial_type;
   dict->capacity = dict_initial;
   initialize_data(dict);
   dict->length     = 0;
@@ -63,6 +66,8 @@ Dict dict_create_impl(DictHash *hash, DictEqual *equal, size_t key_size,
   return dict;
 }
 
+// Double the capacity of a dictionary, change its type if it grows big enough,
+// re-insert key-value pairs properly.
 static void extend(Dict dict);
 
 static int quad_hash(int h, int i, int m)
@@ -71,6 +76,12 @@ static int quad_hash(int h, int i, int m)
   return (h + i * (i + 1) / 2) % m;
 }
 
+// Find a key and a dictionary.
+// If the key is found, return its exact index in `data`.
+// If the key is not found, reutnr -1.
+// * If there is space remain for adding new key in this dictionary, modify
+//   `fail_at` to the proper index to insert `key`.
+// * Otherwise, modify `fail_at` to -1 if the dictionary is full filled.
 static int find_key(const Dict dict, const void *key, int *fail_at)
 {
   if (dict->type == DictTypeLinear)
@@ -93,7 +104,8 @@ static int find_key(const Dict dict, const void *key, int *fail_at)
       int index = quad_hash(hash, i, dict->capacity);
       if (dict->data[index].key == NULL)
       {
-        *fail_at = index;
+        // If
+        *fail_at = i > dict_hash_longest ? -1 : index;
         return -1;
       }
       if (dict->equal(dict->data[index].key, key))
@@ -109,9 +121,6 @@ static int find_key(const Dict dict, const void *key, int *fail_at)
 void dict_put(Dict dict, const void *key, const void *value)
 {
   assert(key != NULL);
-  bool full_filled = dict->length
-                     == (dict->type == DictTypeLinear ? dict->capacity
-                                                      : dict->capacity / 4 * 3);
 
   int write_pos;
   int found = find_key(dict, key, &write_pos);
@@ -123,14 +132,13 @@ void dict_put(Dict dict, const void *key, const void *value)
   else
   {
     // The key is not found in data table, create a new one at proper place.
-    if (full_filled)
+    if (write_pos == -1)
     {
       extend(dict);
       dict_put(dict, key, value);
     }
     else
     {
-      assert(write_pos != -1);
       dict->data[write_pos].key = malloc(dict->key_size);
       assert(dict->data[write_pos].key != NULL);
       memcpy(dict->data[write_pos].key, key, dict->key_size);
@@ -142,8 +150,10 @@ void dict_put(Dict dict, const void *key, const void *value)
   }
 }
 
+// Change `dict`'s capacity and type, re-insert its data properly.
 static void rebuild_dict(const int type, const int capacity, Dict dict)
 {
+  assert(capacity >= dict->capacity);
   Dict rebuilt = malloc(sizeof(struct _Dict));
   assert(rebuilt != NULL);
   memcpy(rebuilt, dict, sizeof(struct _Dict));
@@ -174,9 +184,9 @@ static void rebuild_dict(const int type, const int capacity, Dict dict)
 
 static void extend(Dict dict)
 {
-  rebuild_dict(dict->capacity * 2 < dict_hash_initial ? DictTypeLinear
-                                                      : DictTypeHash,
-               dict->capacity * 2, dict);
+  int double_capa = dict->capacity * 2;
+  rebuild_dict(double_capa < dict_hash_initial ? DictTypeLinear : DictTypeHash,
+               double_capa, dict);
 }
 
 void *dict_get(const Dict dict, const void *key, void *fail)

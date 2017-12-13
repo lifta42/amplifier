@@ -1,6 +1,7 @@
 /**
  * \file dict.h
- * \brief A naive implementation of key-value dictionary.
+ * \brief A naive implementation of key-value dictionary. For more info, check
+ * [notes on naive dictionary](@ref dict_notes).
  * \author liftA42
  * \date Dec 12, 2017
  *
