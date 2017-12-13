@@ -104,7 +104,6 @@ static int find_key(const Dict dict, const void *key, int *fail_at)
       int index = quad_hash(hash, i, dict->capacity);
       if (dict->data[index].key == NULL)
       {
-        // If
         *fail_at = i > dict_hash_longest ? -1 : index;
         return -1;
       }
@@ -180,6 +179,7 @@ static void rebuild_dict(const int type, const int capacity, Dict dict)
     }
   }
   memcpy(dict, rebuilt, sizeof(struct _Dict));
+  free(rebuilt);
 }
 
 static void extend(Dict dict)
