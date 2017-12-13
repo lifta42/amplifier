@@ -4,24 +4,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+
 static void repeat_random_access(const int repeat_time, Dict dict, int scale,
-                                 int keys[], double values[])
-{
-  for (int inner_count = 0; inner_count < repeat_time; inner_count++)
-  {
-    for (int i = 0; i < scale; i++)
-    {
-      values[i] = (double)rand() / RAND_MAX;
-      dict_put(dict, &keys[i], &values[i]);
-    }
-    for (int i = 0; i < scale; i++)
-    {
-      double *val = dict_get(dict, &keys[i], NULL);
-      assert(val != NULL);
-      assert(*val == values[i]);
-    }
-  }
-}
+                                 int keys[], double values[]);
 
 // clang-format off
 dict_gen_hash(hash_int, int)
@@ -36,7 +21,7 @@ int main()
     dict_put(dict, &key, &value);
     int *val = dict_get(dict, &key, NULL);
     assert(*val == 43);
-    key++;
+    key = 0;
     val = dict_get(dict, &key, NULL);
     assert(val == NULL);
     dict_destory(dict);
@@ -54,10 +39,30 @@ int main()
       {
         keys[i] = rand() % (max_key / scale) + max_key / scale * i;
       }
-      for (int i = 4; i < scale_pow; i++) {
+      for (int i = 4; i < scale_pow; i++)
+      {
         repeat_random_access(inner_time, dict, 1 << i, keys, values);
       }
       dict_destory(dict);
+    }
+  }
+}
+
+static void repeat_random_access(const int repeat_time, Dict dict, int scale,
+                                 int keys[], double values[])
+{
+  for (int inner_count = 0; inner_count < repeat_time; inner_count++)
+  {
+    for (int i = 0; i < scale; i++)
+    {
+      values[i] = (double)rand() / RAND_MAX;
+      dict_put(dict, &keys[i], &values[i]);
+    }
+    for (int i = 0; i < scale; i++)
+    {
+      double *val = dict_get(dict, &keys[i], NULL);
+      assert(val != NULL);
+      assert(*val == values[i]);
     }
   }
 }

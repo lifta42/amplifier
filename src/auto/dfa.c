@@ -19,6 +19,7 @@ struct _DFAuto
 
 // https://stackoverflow.com/questions/35237503/sizeof-anonymous-nested-struct
 #define sizeof_field(s, m) (sizeof((((s *)0)->m)))
+#define sizeof_field_p(s, pm) (sizeof(*(((s *)0)->pm)))
 
 DFAuto dfa_create(void)
 {
@@ -26,21 +27,10 @@ DFAuto dfa_create(void)
   assert(dfa != NULL);
   dfa->state_capacity = 16;
   dfa->states =
-      malloc(sizeof_field(struct _DFAuto, states) * dfa->state_capacity);
+      malloc(sizeof_field_p(struct _DFAuto, states) * dfa->state_capacity);
   assert(dfa->states != NULL);
   dfa->state_count = 0;
   return dfa;
-}
-
-static void extend_when_necessary(void *memory, int length, int *capacity,
-                                  size_t unit)
-{
-  if (length == *capacity)
-  {
-    *capacity *= 2;
-    memory = realloc(memory, unit * *capacity);
-    assert(memory != NULL);
-  }
 }
 
 // clang-format off
@@ -50,8 +40,13 @@ static dict_gen_equal(equal_symbol, DFASymbol)
 DFAState dfa_extend(DFAuto dfa)
 // clang-format on
 {
-  extend_when_necessary(dfa->states, dfa->state_count, &dfa->state_capacity,
-                        sizeof_field(struct _DFAuto, states));
+  if (dfa->state_count == dfa->state_capacity)
+  {
+    dfa->state_capacity *= 2;
+    dfa->states = realloc(dfa->states, sizeof_field_p(struct _DFAuto, states)
+                                           * dfa->state_capacity);
+    assert(dfa->states != NULL);
+  }
   // I am regretting for my laziness, that not willing to give the inner struct
   // a name.
   dfa->states[dfa->state_count].transitions =
@@ -64,6 +59,7 @@ DFAState dfa_extend(DFAuto dfa)
 void dfa_connect(DFAuto dfa, const DFAState from, const DFASymbol with,
                  const DFAState to)
 {
+  assert(dfa->states[from].transitions != NULL);
   dict_put(dfa->states[from].transitions, &with, &to);
 }
 
@@ -108,11 +104,18 @@ DFAInst dfa_freeze(const DFAuto dfa, const DFAState start)
 
 DFAState dfa_send(DFAInst inst, const DFASymbol symbol)
 {
-  DFAState *dest =
-      dict_get(inst->dfa->states[inst->current].transitions, &symbol, NULL);
-  assert(dest != NULL);  // no valid transition
-  inst->current = *dest;
-  return inst->current;
+  DFAState dest, *value = dict_get(inst->dfa->states[inst->current].transitions,
+                                   &symbol, NULL);
+  if (value == NULL)
+  {
+    assert(inst->dfa->states[inst->current].fallback != -1);
+    dest = inst->dfa->states[inst->current].fallback;
+  }
+  else
+  {
+    dest = *value;
+  }
+  return inst->current = dest;
 }
 
 bool dfa_acceptable(const DFAInst inst)

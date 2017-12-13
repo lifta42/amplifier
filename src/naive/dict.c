@@ -54,8 +54,8 @@ Dict dict_create_impl(DictHash *hash, DictEqual *equal, size_t key_size,
 {
   Dict dict = malloc(sizeof(struct _Dict));
   assert(dict != NULL);
-  dict->hash  = hash;
-  dict->equal = equal;
+  dict->hash     = hash;
+  dict->equal    = equal;
   dict->type     = dict_initial_type;
   dict->capacity = dict_initial;
   initialize_data(dict);
