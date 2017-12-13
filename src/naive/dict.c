@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-const int dict_linear_limit = 16;
-const int dict_hash_initial = 128;
+const int dict_initial      = 16;
+const int dict_hash_initial = 16;
 
 struct _Dict
 {
@@ -50,10 +50,11 @@ Dict dict_create_impl(DictHash *hash, DictEqual *equal, size_t key_size,
 {
   Dict dict = malloc(sizeof(struct _Dict));
   assert(dict != NULL);
-  dict->hash     = hash;
-  dict->equal    = equal;
-  dict->type     = DictTypeLinear;
-  dict->capacity = dict_linear_limit;
+  dict->hash  = hash;
+  dict->equal = equal;
+  // dict->type     = DictTypeLinear;
+  dict->type     = DictTypeHash;
+  dict->capacity = dict_initial;
   initialize_data(dict);
   dict->length     = 0;
   dict->key_size   = key_size;
@@ -81,10 +82,7 @@ static int find_key(const Dict dict, const void *key, int *fail_at)
         return i;
       }
     }
-    if (fail_at != NULL)
-    {
-      *fail_at = dict->length == dict->capacity ? -1 : dict->length;
-    }
+    *fail_at = dict->length == dict->capacity ? -1 : dict->length;
     return -1;
   }
   else
@@ -111,12 +109,9 @@ static int find_key(const Dict dict, const void *key, int *fail_at)
 void dict_put(Dict dict, const void *key, const void *value)
 {
   assert(key != NULL);
-  if (dict->length
-      == (dict->type == DictTypeLinear ? dict->capacity
-                                       : dict->capacity / 4 * 3))
-  {
-    extend(dict);
-  }
+  bool full_filled = dict->length
+                     == (dict->type == DictTypeLinear ? dict->capacity
+                                                      : dict->capacity / 4 * 3);
 
   int write_pos;
   int found = find_key(dict, key, &write_pos);
@@ -128,13 +123,14 @@ void dict_put(Dict dict, const void *key, const void *value)
   else
   {
     // The key is not found in data table, create a new one at proper place.
-    if (write_pos == -1)
+    if (full_filled)
     {
       extend(dict);
       dict_put(dict, key, value);
     }
     else
     {
+      assert(write_pos != -1);
       dict->data[write_pos].key = malloc(dict->key_size);
       assert(dict->data[write_pos].key != NULL);
       memcpy(dict->data[write_pos].key, key, dict->key_size);
@@ -185,7 +181,8 @@ static void extend(Dict dict)
 
 void *dict_get(const Dict dict, const void *key, void *fail)
 {
-  int pos = find_key(dict, key, NULL);
+  int trivial_fail_at;
+  int pos = find_key(dict, key, &trivial_fail_at);
   return pos != -1 ? dict->data[pos].value : fail;
 }
 
