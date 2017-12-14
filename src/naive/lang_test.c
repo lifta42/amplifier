@@ -31,6 +31,12 @@ int fail_alloc(void *payload)
   return 0; // trivial
 }
 
+int fail_alloc_2(void *payload)
+{
+  malloc_s((1 << 31) + (1 << 30));
+  return 0; // trivial
+}
+
 int main()
 {
   assert(sizeof(field(Foo, foo)) == align(sizeof(int) + sizeof(double)));
@@ -43,5 +49,9 @@ int main()
 
   Sandbox box = sand_create(fail_alloc);
   assert(sand_run(box, NULL) == 1);
-  // TODO: find a way to test `malloc` returns NULL case.
+  clean(box, sand_destroy);
+
+  box = sand_create(fail_alloc_2);
+  assert(sand_run(box, NULL) == 1);
+  clean(box, sand_destroy);
 }
