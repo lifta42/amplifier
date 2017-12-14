@@ -1,6 +1,7 @@
 // Created by liftA42 on Dec 14, 2017.
 #include "panic.h"
 #include "sand.h"
+#include "lang.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -25,7 +26,7 @@ struct _Sandbox
 
 Sandbox sand_create(SandProc *proc)
 {
-  Sandbox box   = malloc(sizeof(struct _Sandbox));
+  Sandbox box   = malloc_s(sizeof(struct _Sandbox));
   box->proc     = proc;
   box->executed = false;
   panic(pipe(box->filedes[0]) != -1, "cannot create pipe to sandbox");
@@ -89,7 +90,7 @@ void sand_destroy(Sandbox box)
 {
   close(box->filedes[0][0]);
   close(box->filedes[1][0]);
-  free(box);
+  clean(box, free);
 }
 
 // the Windows implementation

@@ -17,7 +17,7 @@
 #ifndef LIFTA42_AUTOMATA_DFA_H
 #define LIFTA42_AUTOMATA_DFA_H
 
-#include <stdbool.h>
+#include "../naive/lang.h"
 
 typedef int DFAState;
 typedef int DFASymbol;

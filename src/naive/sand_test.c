@@ -1,5 +1,6 @@
 // Created by liftA42 on Dec 14, 2017.
 #include "sand.h"
+#include "lang.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,4 +22,5 @@ int main()
   assert(strcmp(buffer, "hello, liftA42!") == 0);
   sand_read(box, 1, buffer, sizeof(buffer));
   assert(strcmp(buffer, "this is a error message") == 0);
+  clean(box, sand_destroy);
 }

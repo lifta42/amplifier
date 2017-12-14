@@ -14,7 +14,7 @@
 #ifndef LIFTA42_NAIVE_PANIC_H
 #define LIFTA42_NAIVE_PANIC_H
 
-#include <stdbool.h>
+#include "lang.h"
 
 /** Exit the program immediately after printing a piece of message if assertion
 fails.

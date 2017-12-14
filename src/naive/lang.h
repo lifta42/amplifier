@@ -40,6 +40,6 @@ void *realloc_s(void *who, size_t size);
 /** Helper for setting freed pointer to `NULL`. */
 #define clean(object, cleaner)                                                 \
   cleaner(object);                                                             \
-  (object) = NULL;
+  (object) = NULL
 
 #endif

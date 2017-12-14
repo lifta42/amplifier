@@ -14,8 +14,7 @@
 #ifndef LIFTA42_NAIVE_DICT_H
 #define LIFTA42_NAIVE_DICT_H
 
-#include <stdbool.h>
-#include <stddef.h>
+#include "lang.h"
 
 typedef struct _Dict *Dict;
 

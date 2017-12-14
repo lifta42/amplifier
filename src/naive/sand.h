@@ -10,8 +10,6 @@
 #ifndef LIFTA42_NAIVE_SAND_H
 #define LIFTA42_NAIVE_SAND_H
 
-#include <stddef.h>
-
 typedef struct _Sandbox *Sandbox;
 
 /** The callback acts as a subprocess.

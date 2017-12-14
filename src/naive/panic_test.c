@@ -1,6 +1,7 @@
 // Created by liftA42 on Dec 13, 2017.
 #include "panic.h"
 #include "sand.h"
+#include "lang.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -30,5 +31,6 @@ int main()
     sand_read(box, 1, buffer, sizeof(buffer));
     assert(strcmp(buffer, "this one should fail with a greeting: hello!\n")
            == 0);
+    clean(box, sand_destroy);
   }
 }

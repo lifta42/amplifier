@@ -35,13 +35,10 @@ struct _Dict
 };
 
 
-#define sizeof_field(s, m) (sizeof((((s *)0)->m)))
-#define sizeof_field_p(s, pm) (sizeof(*(((s *)0)->pm)))
-
 // WARNING: Only be able to be called after `capacity` field is set properly.
 static void initialize_data(Dict dict)
 {
-  size_t data_size = sizeof_field_p(struct _Dict, data) * dict->capacity;
+  size_t data_size = sizeof(*field(struct _Dict, data)) * dict->capacity;
   dict->data       = malloc(data_size);
   assert(dict->data != NULL);
   // Make sure the `key` in all free rooms in `hash_dict->data` is `NULL`.

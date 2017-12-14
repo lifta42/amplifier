@@ -1,5 +1,6 @@
 // Created by liftA42 on Dec 12, 2017.
 #include "dict.h"
+#include "lang.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <time.h>
@@ -24,7 +25,7 @@ int main()
     key = 0;
     val = dict_get(dict, &key, NULL);
     assert(val == NULL);
-    dict_destory(dict);
+    clean(dict, dict_destory);
   }
   {
     const int repeat_time = 1 << 6, inner_time = 1 << 6;
@@ -43,7 +44,7 @@ int main()
       {
         repeat_random_access(inner_time, dict, 1 << i, keys, values);
       }
-      dict_destory(dict);
+      clean(dict, dict_destory);
     }
   }
 }

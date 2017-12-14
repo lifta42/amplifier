@@ -1,5 +1,6 @@
 // Created by liftA42 on Dec 11, 2017.
 #include "dfa.h"
+#include "../naive/lang.h"
 #include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -38,8 +39,8 @@ int main()
       assert(dfa_acceptable(inst) == accept[i]);
     }
 
-    dfa_destory_inst(inst);
-    dfa_destroy(dfa);
+    clean(inst, dfa_destory_inst);
+    clean(dfa, dfa_destroy);
   }
   {
     DFAuto dfa = dfa_create();
@@ -129,9 +130,9 @@ int main()
           assert(dfa_send(inst, sym) == expect_dest);
           curr = expect_dest;
         }
-        dfa_destory_inst(inst);
+        clean(inst, dfa_destory_inst);
       }
-      dfa_destroy(dfa);
+      clean(dfa, dfa_destroy);
     }
   }
 }
