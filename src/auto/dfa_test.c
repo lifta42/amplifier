@@ -62,9 +62,9 @@ int main()
     dfa_destroy(dfa);
   }
   {
-    const int repeat_time = 1 << 6, inner_time = 1 << 6, jump_time = 1 << 10;
+    const int repeat_time = 1 << 5, inner_time = 1 << 6, jump_time = 1 << 10;
     // symbol `0` means random symbol, which shoule trigger fallback
-    const int state_count = 1 << 10, symbol_range = 256;
+    const int state_count = 1 << 9, symbol_range = 256;
     const int conn_count = state_count * 1 << 6;
     srand(time(NULL));
     for (int i = 0; i < repeat_time; i++)
@@ -93,9 +93,9 @@ int main()
         {
           continue;
         }
-        int dest             = rand() % state_count;  // ok to return to start
-        table[start][symbol] = dest;
+        int dest = rand() % state_count;  // ok to return to start
 
+        table[start][symbol] = dest;
         if (symbol != 0)
         {
           dfa_connect(dfa, start, symbol, dest);

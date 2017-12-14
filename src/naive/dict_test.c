@@ -27,8 +27,8 @@ int main()
     dict_destory(dict);
   }
   {
-    const int repeat_time = 1 << 10, inner_time = 1 << 6;
-    const int max_key = 2 << 16, scale_pow = 9, scale = 1 << scale_pow;
+    const int repeat_time = 1 << 6, inner_time = 1 << 6;
+    const int max_key = 1 << 16, scale_pow = 11, scale = 1 << scale_pow;
     for (int repeat_count = 0; repeat_count < repeat_time; repeat_count++)
     {
       Dict dict = dict_create(int, double, hash_int, equal_int);
