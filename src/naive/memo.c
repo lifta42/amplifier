@@ -11,14 +11,7 @@ struct _Memo
 
 static size_t align_impl(size_t s)
 {
-  if (s == 1ul)
-  {
-    return 1ul;
-  }
-  else
-  {
-    return align_impl(s >> 1) << 1;
-  }
+  return s == 1ul ? 1ul : align_impl(s >> 1) << 1;
 }
 
 static size_t align(size_t s)
