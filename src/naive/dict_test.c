@@ -28,14 +28,16 @@ int main()
     clean(dict, dict_destory);
   }
   {
+#define scale_pow 11
+#define scale (1 << scale_pow)
     const int repeat_time = 1 << 6, inner_time = 1 << 6;
-    const int max_key = 1 << 16, scale_pow = 11, scale = 1 << scale_pow;
+    const int max_key = 1 << 16;
     for (int repeat_count = 0; repeat_count < repeat_time; repeat_count++)
     {
       Dict dict = dict_create(int, double, hash_int, equal_int);
       int keys[scale];
       double values[scale];
-      srand(time(NULL));
+      srand((unsigned int)time(NULL));
       for (int i = 0; i < scale; i++)
       {
         keys[i] = rand() % (max_key / scale) + max_key / scale * i;
@@ -48,6 +50,8 @@ int main()
     }
   }
 }
+#undef scale_pow
+#undef scale
 
 static void repeat_random_access(const int repeat_time, Dict dict, int scale,
                                  int keys[], double values[])

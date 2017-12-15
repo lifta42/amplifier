@@ -24,6 +24,7 @@ int main()
   {
     panic(42 == 42, "the world is running in a wrong way");
   }
+#ifndef _WIN32
   {
     Sandbox box = sand_create(panic_error);
     assert(sand_run(box, NULL) == 1);
@@ -33,4 +34,5 @@ int main()
            == 0);
     clean(box, sand_destroy);
   }
+#endif
 }

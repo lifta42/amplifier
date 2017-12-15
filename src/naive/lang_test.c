@@ -47,6 +47,7 @@ int main()
   clean(mem, free);
   assert(mem == NULL);
 
+#ifndef _WIN32
   Sandbox box = sand_create(fail_alloc);
   assert(sand_run(box, NULL) == 1);
   clean(box, sand_destroy);
@@ -54,4 +55,5 @@ int main()
   box = sand_create(fail_alloc_2);
   assert(sand_run(box, NULL) == 1);
   clean(box, sand_destroy);
+#endif
 }

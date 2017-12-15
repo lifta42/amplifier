@@ -14,6 +14,7 @@ static int work(void *payload) {
 
 int main()
 {
+#ifndef _WIN32
   Sandbox box = sand_create(work);
   char *name = "liftA42";
   assert(sand_run(box, name) == 42);
@@ -23,4 +24,5 @@ int main()
   sand_read(box, 1, buffer, sizeof(buffer));
   assert(strcmp(buffer, "this is a error message") == 0);
   clean(box, sand_destroy);
+#endif
 }

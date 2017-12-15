@@ -63,11 +63,13 @@ int main()
     dfa_destroy(dfa);
   }
   {
-    const int repeat_time = 1 << 5, inner_time = 1 << 6, jump_time = 1 << 10;
-    // symbol `0` means random symbol, which shoule trigger fallback
-    const int state_count = 1 << 9, symbol_range = 256;
-    const int conn_count = state_count * 1 << 6;
-    srand(time(NULL));
+#define repeat_time 32
+#define inner_time 64
+#define jump_time 1024
+#define state_count 512
+#define symbol_range 256
+#define conn_count state_count * 64
+    srand((unsigned int)time(NULL));
     for (int i = 0; i < repeat_time; i++)
     {
       // table[<start state>][<received symbol>] == <destined state>
