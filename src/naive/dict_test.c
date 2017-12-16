@@ -49,9 +49,9 @@ int main()
       clean(dict, dict_destory);
     }
   }
+  #undef scale_pow
+  #undef scale
 }
-#undef scale_pow
-#undef scale
 
 static void repeat_random_access(const int repeat_time, Dict dict, int scale,
                                  int keys[], double values[])

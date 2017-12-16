@@ -63,12 +63,10 @@ int main()
     dfa_destroy(dfa);
   }
   {
-#define repeat_time 32
-#define inner_time 64
-#define jump_time 1024
 #define state_count 512
 #define symbol_range 256
-#define conn_count state_count * 64
+    const int repeat_time = 32, inner_time = 64, jump_time = 1024;
+    const int conn_count = state_count * 64;
     srand((unsigned int)time(NULL));
     for (int i = 0; i < repeat_time; i++)
     {
@@ -137,4 +135,6 @@ int main()
       clean(dfa, dfa_destroy);
     }
   }
+#undef state_count
+#undef symbol_range
 }

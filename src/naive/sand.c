@@ -11,6 +11,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#else
+#include <windows.h>
+#include <tchar.h>
+#include <strsafe.h>
 #endif
 
 // the *nix implementation
@@ -96,6 +100,9 @@ void sand_destroy(Sandbox box)
 // the Windows implementation
 #else
 
-// TODO
+// struct _Sandbox {
+//
+// }
+something
 
 #endif
