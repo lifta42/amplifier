@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.8.13"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Diode Programming Language: src/dfa.h File Reference</title>
+<title>The Amplifier Project: src/auto/dfa.h File Reference</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -21,7 +21,7 @@
  <tbody>
  <tr style="height: 56px;">
   <td id="projectalign" style="padding-left: 0.5em;">
-   <div id="projectname">Diode Programming Language
+   <div id="projectname">The Amplifier Project
    </div>
   </td>
  </tr>
@@ -58,7 +58,7 @@ $(function() {
 
 <div id="nav-path" class="navpath">
   <ul>
-<li class="navelem"><a class="el" href="dir_68267d1309a1af8e8297ef4c3efbcdba.html">src</a></li>  </ul>
+<li class="navelem"><a class="el" href="dir_68267d1309a1af8e8297ef4c3efbcdba.html">src</a></li><li class="navelem"><a class="el" href="dir_62677d45c2e9578ec1cb429fe8bdc3d5.html">auto</a></li>  </ul>
 </div>
 </div><!-- top -->
 <div class="header">
@@ -72,7 +72,8 @@ $(function() {
 
 <p>A simple implementation of determine finite automata.  
 <a href="#details">More...</a></p>
-
+<div class="textblock"><code>#include &quot;<a class="el" href="lang_8h_source.html">../naive/lang.h</a>&quot;</code><br />
+</div>
 <p><a href="dfa_8h_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="typedef-members"></a>
@@ -83,27 +84,139 @@ typedef int&#160;</td><td class="memItemRight" valign="bottom"><b>DFAState</b></
 <tr class="memitem:a918fda46d9f2ac1dba6d27f9ef39375c"><td class="memItemLeft" align="right" valign="top"><a id="a918fda46d9f2ac1dba6d27f9ef39375c"></a>
 typedef int&#160;</td><td class="memItemRight" valign="bottom"><b>DFASymbol</b></td></tr>
 <tr class="separator:a918fda46d9f2ac1dba6d27f9ef39375c"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a375237918cf7693c071fce160ec97183"><td class="memItemLeft" align="right" valign="top"><a id="a375237918cf7693c071fce160ec97183"></a>
-typedef struct _DFAuto *&#160;</td><td class="memItemRight" valign="bottom"><b>DFAuto</b></td></tr>
+<tr class="memitem:a375237918cf7693c071fce160ec97183"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="struct___d_f_auto.html">_DFAuto</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a></td></tr>
 <tr class="separator:a375237918cf7693c071fce160ec97183"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a522c9909920ca3a65d7b3a74797d2e8e"><td class="memItemLeft" align="right" valign="top">typedef struct <a class="el" href="struct___d_f_a_inst.html">_DFAInst</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a></td></tr>
+<tr class="separator:a522c9909920ca3a65d7b3a74797d2e8e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:aa92e1ebed473f5fb5ebced6a1cf4b706"><td class="memItemLeft" align="right" valign="top">DFAuto&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#aa92e1ebed473f5fb5ebced6a1cf4b706">dfa_create</a> ()</td></tr>
-<tr class="separator:aa92e1ebed473f5fb5ebced6a1cf4b706"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a4f974e99f3c4cbc526e21c9902a16e5a"><td class="memItemLeft" align="right" valign="top">DFAState&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a4f974e99f3c4cbc526e21c9902a16e5a">dfa_extend</a> (DFAuto dfa)</td></tr>
+<tr class="memitem:a3188b6ae9e770916198fa2d3247e2d8a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a3188b6ae9e770916198fa2d3247e2d8a">dfa_create</a> (void)</td></tr>
+<tr class="separator:a3188b6ae9e770916198fa2d3247e2d8a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4f974e99f3c4cbc526e21c9902a16e5a"><td class="memItemLeft" align="right" valign="top">DFAState&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a4f974e99f3c4cbc526e21c9902a16e5a">dfa_extend</a> (<a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa)</td></tr>
 <tr class="separator:a4f974e99f3c4cbc526e21c9902a16e5a"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a08a3930b9a2d4d57e7b8cba59a9c85e1"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a08a3930b9a2d4d57e7b8cba59a9c85e1">dfa_connect</a> (DFAuto dfa, DFAState from, DFASymbol with, DFAState to)</td></tr>
-<tr class="separator:a08a3930b9a2d4d57e7b8cba59a9c85e1"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1936299c8e8aae7d044b24cef156b624"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a1936299c8e8aae7d044b24cef156b624">dfa_connect</a> (<a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa, const DFAState from, const DFASymbol with, const DFAState to)</td></tr>
+<tr class="separator:a1936299c8e8aae7d044b24cef156b624"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a840537c88bace12dec98db98c1f4b7c2"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a840537c88bace12dec98db98c1f4b7c2">dfa_connect_fallback</a> (<a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa, const DFAState from, const DFAState to)</td></tr>
+<tr class="separator:a840537c88bace12dec98db98c1f4b7c2"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8b2a6453f961054dfa4ecee8576e0198"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a8b2a6453f961054dfa4ecee8576e0198">dfa_accept</a> (<a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa, const DFAState state)</td></tr>
+<tr class="separator:a8b2a6453f961054dfa4ecee8576e0198"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac218fed7cf6d55ae742fca864558596b"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#ac218fed7cf6d55ae742fca864558596b">dfa_destroy</a> (<a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa)</td></tr>
+<tr class="separator:ac218fed7cf6d55ae742fca864558596b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ab36c72fc19a50fb1eaa9f6f8a8f405a9"><td class="memItemLeft" align="right" valign="top"><a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#ab36c72fc19a50fb1eaa9f6f8a8f405a9">dfa_freeze</a> (const <a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa, const DFAState start)</td></tr>
+<tr class="separator:ab36c72fc19a50fb1eaa9f6f8a8f405a9"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a1c106e3992e1ab9fd8f17498e6493f88"><td class="memItemLeft" align="right" valign="top">DFAState&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#a1c106e3992e1ab9fd8f17498e6493f88">dfa_send</a> (<a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a> instance, const DFASymbol symbol)</td></tr>
+<tr class="separator:a1c106e3992e1ab9fd8f17498e6493f88"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aae508755850e9153c41105bbd900acc5"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#aae508755850e9153c41105bbd900acc5">dfa_acceptable</a> (const <a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a> instance)</td></tr>
+<tr class="separator:aae508755850e9153c41105bbd900acc5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad78e4ddffb52ddf2df125461429a7fcd"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="dfa_8h.html#ad78e4ddffb52ddf2df125461429a7fcd">dfa_destory_inst</a> (<a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a> instance)</td></tr>
+<tr class="separator:ad78e4ddffb52ddf2df125461429a7fcd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A simple implementation of determine finite automata. </p>
+<dl class="section author"><dt>Author</dt><dd>liftA42 </dd></dl>
+<dl class="section date"><dt>Date</dt><dd>Dec 10, 2017</dd></dl>
 <p>A DFA is built up with several states and a transition function. The function accepts a state and a symbol as its arguments, and returns another state.</p>
 <p>After building, a DFA instance is frozen and may work any times you want. For each time it runs, the DFA accepts a series of labels as input and transitions with it. The state of DFA can be traced.</p>
 <p>Additional callbacks may be set for states. Proper callback will be triggered if the corresponded state is reached. </p>
-</div><h2 class="groupheader">Function Documentation</h2>
-<a id="a08a3930b9a2d4d57e7b8cba59a9c85e1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a08a3930b9a2d4d57e7b8cba59a9c85e1">&#9670;&nbsp;</a></span>dfa_connect()</h2>
+</div><h2 class="groupheader">Typedef Documentation</h2>
+<a id="a522c9909920ca3a65d7b3a74797d2e8e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a522c9909920ca3a65d7b3a74797d2e8e">&#9670;&nbsp;</a></span>DFAInst</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="struct___d_f_a_inst.html">_DFAInst</a>* <a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The inner representation of an instance of a DFA.</p>
+<p>Multiple instances of a DFA may be created, each of them executes separately, and leave the original <code>DFAuto</code> unchanged. </p>
+
+</div>
+</div>
+<a id="a375237918cf7693c071fce160ec97183"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a375237918cf7693c071fce160ec97183">&#9670;&nbsp;</a></span>DFAuto</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef struct <a class="el" href="struct___d_f_auto.html">_DFAuto</a>* <a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>The inner representation of a DFA. </p>
+
+</div>
+</div>
+<h2 class="groupheader">Function Documentation</h2>
+<a id="a8b2a6453f961054dfa4ecee8576e0198"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8b2a6453f961054dfa4ecee8576e0198">&#9670;&nbsp;</a></span>dfa_accept()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void dfa_accept </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td>
+          <td class="paramname"><em>dfa</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const DFAState&#160;</td>
+          <td class="paramname"><em>state</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Set a state as acceptable state of a DFA.</p>
+<p>Passing a non-existent state will cause error.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">dfa</td><td>the modified DFA </td></tr>
+    <tr><td class="paramname">state</td><td>the acceptable state </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="aae508755850e9153c41105bbd900acc5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aae508755850e9153c41105bbd900acc5">&#9670;&nbsp;</a></span>dfa_acceptable()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool dfa_acceptable </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a>&#160;</td>
+          <td class="paramname"><em>instance</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Check whether a DFA instance is on an acceptable state.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">instance</td><td>the checked DFA instance </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The result is <code>ture</code> if the passed DFA instance is on an acceptable state. </dd></dl>
+
+</div>
+</div>
+<a id="a1936299c8e8aae7d044b24cef156b624"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1936299c8e8aae7d044b24cef156b624">&#9670;&nbsp;</a></span>dfa_connect()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -111,25 +224,25 @@ Functions</h2></td></tr>
         <tr>
           <td class="memname">void dfa_connect </td>
           <td>(</td>
-          <td class="paramtype">DFAuto&#160;</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td>
           <td class="paramname"><em>dfa</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">DFAState&#160;</td>
+          <td class="paramtype">const DFAState&#160;</td>
           <td class="paramname"><em>from</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">DFASymbol&#160;</td>
+          <td class="paramtype">const DFASymbol&#160;</td>
           <td class="paramname"><em>with</em>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">DFAState&#160;</td>
+          <td class="paramtype">const DFAState&#160;</td>
           <td class="paramname"><em>to</em>&#160;</td>
         </tr>
         <tr>
@@ -139,33 +252,132 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Draw an arrow between two states of a DFA. After this invoking, <code>dfa</code> will jump from <code>from</code> state to <code>to</code> state when <code>with</code> symbol is received. Connecting states that not exists will cause error. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Draw an arrow between two states of a DFA.</p>
+<p>After this invoking, <code>dfa</code> will jump from <code>from</code> state to <code>to</code> state when <code>with</code> symbol is received.</p>
+<p>Connecting states that not exists will cause error.</p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">dfa</td><td>the modified DFA. </td></tr>
-    <tr><td class="paramname">from</td><td>the source state of jumping. </td></tr>
-    <tr><td class="paramname">with</td><td>the symbol that causes jumping. </td></tr>
-    <tr><td class="paramname">to</td><td>the destined state of jumping. </td></tr>
+    <tr><td class="paramname">dfa</td><td>the modified DFA </td></tr>
+    <tr><td class="paramname">from</td><td>the source state of jumping </td></tr>
+    <tr><td class="paramname">with</td><td>the symbol that causes jumping </td></tr>
+    <tr><td class="paramname">to</td><td>the destined state of jumping </td></tr>
   </table>
   </dd>
 </dl>
 
 </div>
 </div>
-<a id="aa92e1ebed473f5fb5ebced6a1cf4b706"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa92e1ebed473f5fb5ebced6a1cf4b706">&#9670;&nbsp;</a></span>dfa_create()</h2>
+<a id="a840537c88bace12dec98db98c1f4b7c2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a840537c88bace12dec98db98c1f4b7c2">&#9670;&nbsp;</a></span>dfa_connect_fallback()</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">DFAuto dfa_create </td>
+          <td class="memname">void dfa_connect_fallback </td>
           <td>(</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td>
+          <td class="paramname"><em>dfa</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const DFAState&#160;</td>
+          <td class="paramname"><em>from</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const DFAState&#160;</td>
+          <td class="paramname"><em>to</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Similiar to <code>dfa_connect</code>, only the jumping will occur if none of any existing symbol matches the received one.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">dfa</td><td>the modified DFA </td></tr>
+    <tr><td class="paramname">from</td><td>the source state of jumping </td></tr>
+    <tr><td class="paramname">to</td><td>the destined state of jumping </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a3188b6ae9e770916198fa2d3247e2d8a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3188b6ae9e770916198fa2d3247e2d8a">&#9670;&nbsp;</a></span>dfa_create()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a> dfa_create </td>
+          <td>(</td>
+          <td class="paramtype">void&#160;</td>
           <td class="paramname"></td><td>)</td>
           <td></td>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Create a new DFA with no state. Invoking <code>dfa_work</code> directly on its result will cause error. </p><dl class="section return"><dt>Returns</dt><dd>An empty DFA </dd></dl>
+<p>Create a new DFA with no state.</p>
+<p>Invoking <code>dfa_work</code> directly on its result will cause error.</p>
+<dl class="section return"><dt>Returns</dt><dd>An empty DFA. </dd></dl>
+
+</div>
+</div>
+<a id="ad78e4ddffb52ddf2df125461429a7fcd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad78e4ddffb52ddf2df125461429a7fcd">&#9670;&nbsp;</a></span>dfa_destory_inst()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void dfa_destory_inst </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a>&#160;</td>
+          <td class="paramname"><em>instance</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Free a DFA instance.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">instance</td><td>the freed DFA instance </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ac218fed7cf6d55ae742fca864558596b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac218fed7cf6d55ae742fca864558596b">&#9670;&nbsp;</a></span>dfa_destroy()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void dfa_destroy </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td>
+          <td class="paramname"><em>dfa</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Free a DFA.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">dfa</td><td>the freed DFA </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>
@@ -178,19 +390,96 @@ Functions</h2></td></tr>
         <tr>
           <td class="memname">DFAState dfa_extend </td>
           <td>(</td>
-          <td class="paramtype">DFAuto&#160;</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td>
           <td class="paramname"><em>dfa</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Create a new state node in a DFA. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Create a new state node in a DFA.</p>
+<dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">dfa</td><td>the extended DFA. </td></tr>
+    <tr><td class="paramname">dfa</td><td>the extended DFA </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The state that created for <code>dfa</code> </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The state that created for <code>dfa</code>. </dd></dl>
+
+</div>
+</div>
+<a id="ab36c72fc19a50fb1eaa9f6f8a8f405a9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab36c72fc19a50fb1eaa9f6f8a8f405a9">&#9670;&nbsp;</a></span>dfa_freeze()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a> dfa_freeze </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="dfa_8h.html#a375237918cf7693c071fce160ec97183">DFAuto</a>&#160;</td>
+          <td class="paramname"><em>dfa</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const DFAState&#160;</td>
+          <td class="paramname"><em>start</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Create a <code>DFAInstance</code> with a <code>DFA</code> and starting state.</p>
+<p>Different instances of the same DFA may start executing from vary states.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">dfa</td><td>the frozen DFA </td></tr>
+    <tr><td class="paramname">start</td><td>the start state of <code>dfa</code> </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The created <code>DFAInstance</code> object. </dd></dl>
+
+</div>
+</div>
+<a id="a1c106e3992e1ab9fd8f17498e6493f88"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1c106e3992e1ab9fd8f17498e6493f88">&#9670;&nbsp;</a></span>dfa_send()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">DFAState dfa_send </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="dfa_8h.html#a522c9909920ca3a65d7b3a74797d2e8e">DFAInst</a>&#160;</td>
+          <td class="paramname"><em>instance</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const DFASymbol&#160;</td>
+          <td class="paramname"><em>symbol</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Send a symbol into a DFA instance and let it transition.</p>
+<p>An error will be raised if there's no outgoing arrow matching passed symbol.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">instance</td><td>the modified DFA instance </td></tr>
+    <tr><td class="paramname">symbol</td><td>the sent symbol </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The state that DFA instance reaches after receiving <code>symbol</code>. </dd></dl>
 
 </div>
 </div>
