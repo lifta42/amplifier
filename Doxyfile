@@ -1,3 +1,4 @@
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = doc
 PROJECT_NAME           = "The Amplifier Project"
 RECURSIVE              = YES
-GENERATE_LATEX         = NO

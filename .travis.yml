@@ -1,6 +1,0 @@
-language: c
-compiler:
-  - clang
-  - gcc
-script:
-  - cmake . && make && ctest
